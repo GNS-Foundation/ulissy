@@ -1,0 +1,1 @@
+/Users/camiloayerbeposada/ULissy_Program/compiler/crates/ulissy-parser/target/debug/libulissy_parser.rlib: /Users/camiloayerbeposada/ULissy_Program/compiler/crates/ulissy-lexer/src/lib.rs /Users/camiloayerbeposada/ULissy_Program/compiler/crates/ulissy-parser/src/ast.rs /Users/camiloayerbeposada/ULissy_Program/compiler/crates/ulissy-parser/src/lib.rs
