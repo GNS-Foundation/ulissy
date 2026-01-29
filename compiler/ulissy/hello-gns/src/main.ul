@@ -1,0 +1,19 @@
+// Welcome to ULissy!
+// A Programming Language for Moving Machines
+
+identity me = Keychain.primary
+
+// Collect breadcrumbs to prove humanity
+every 10.minutes when battery > 20 {
+    let crumb = breadcrumb(
+        cell: here.h3(10),
+        context: sensors.digest,
+        previous: me.trajectory.last
+    )
+    me.trajectory.append(crumb)
+}
+
+// Ready to claim handle after 100 breadcrumbs
+when me.trajectory.count >= 100 {
+    print("Ready to claim @handle!")
+}

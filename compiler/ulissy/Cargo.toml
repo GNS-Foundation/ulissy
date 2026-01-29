@@ -1,0 +1,29 @@
+[package]
+name = "ulissy"
+version = "0.1.0"
+edition = "2021"
+authors = ["GNS Foundation <foundation@gns.foundation>"]
+description = "ULissy - A Programming Language for Moving Machines"
+license = "MIT"
+repository = "https://github.com/cayerbe/ulissy_program"
+keywords = ["compiler", "ulissy", "gns", "geospatial", "identity"]
+categories = ["compilers", "command-line-utilities"]
+readme = "README.md"
+
+[[bin]]
+name = "ulissy"
+path = "src/main.rs"
+
+[dependencies]
+ulissy-lexer = { path = "../crates/ulissy-lexer" }
+ulissy-parser = { path = "../crates/ulissy-parser" }
+ulissy-types = { path = "../crates/ulissy-types" }
+ulissy-codegen = { path = "../crates/ulissy-codegen" }
+
+# CLI dependencies
+clap = { version = "4.4", features = ["derive"] }
+colored = "2.1"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"

@@ -1,0 +1,10 @@
+[package]
+name = "hello-gns"
+version = "0.1.0"
+authors = ["Your Name <you@example.com>"]
+
+[dependencies]
+# Add ULissy dependencies here
+
+[build]
+target = ["ios", "android", "desktop"]
