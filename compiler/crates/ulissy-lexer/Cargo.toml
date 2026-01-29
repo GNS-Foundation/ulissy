@@ -1,0 +1,25 @@
+[package]
+name = "ulissy-lexer"
+version = "0.1.0"
+edition = "2021"
+authors = ["GNS Foundation <foundation@gns.foundation>"]
+description = "Lexer/Tokenizer for the ULissy programming language"
+license = "MIT"
+repository = "https://github.com/cayerbe/ulissy_program"
+keywords = ["lexer", "compiler", "ulissy", "gns", "geospatial"]
+categories = ["compilers", "parsing"]
+
+[lib]
+name = "ulissy_lexer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ulissy-lex"
+path = "src/main.rs"
+
+[dependencies]
+# No external dependencies for the lexer - pure Rust
+
+[dev-dependencies]
+# For testing
+pretty_assertions = "1.4"
