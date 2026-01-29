@@ -1,0 +1,26 @@
+[package]
+name = "ulissy-codegen"
+version = "0.1.0"
+edition = "2021"
+authors = ["GNS Foundation <foundation@gns.foundation>"]
+description = "Code generator for the ULissy programming language - emits Rust code"
+license = "MIT"
+repository = "https://github.com/cayerbe/ulissy_program"
+keywords = ["codegen", "compiler", "ulissy", "gns", "geospatial"]
+categories = ["compilers"]
+
+[lib]
+name = "ulissy_codegen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ulissy-gen"
+path = "src/main.rs"
+
+[dependencies]
+ulissy-lexer = { path = "../ulissy-lexer" }
+ulissy-parser = { path = "../ulissy-parser" }
+ulissy-types = { path = "../ulissy-types" }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
