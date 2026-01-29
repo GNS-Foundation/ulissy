@@ -1,0 +1,25 @@
+[package]
+name = "ulissy-types"
+version = "0.1.0"
+edition = "2021"
+authors = ["GNS Foundation <foundation@gns.foundation>"]
+description = "Type checker for the ULissy programming language"
+license = "MIT"
+repository = "https://github.com/cayerbe/ulissy_program"
+keywords = ["types", "compiler", "ulissy", "gns", "geospatial"]
+categories = ["compilers"]
+
+[lib]
+name = "ulissy_types"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ulissy-check"
+path = "src/main.rs"
+
+[dependencies]
+ulissy-lexer = { path = "../ulissy-lexer" }
+ulissy-parser = { path = "../ulissy-parser" }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
