@@ -1,0 +1,54 @@
+[package]
+name = "gns-runtime"
+version = "0.1.0"
+edition = "2021"
+authors = ["GNS Foundation <foundation@gns.foundation>"]
+description = "Runtime support library for ULissy - provides scheduling, location, sensors, and platform abstractions"
+license = "MIT"
+repository = "https://github.com/gns-protocol/gns-runtime"
+keywords = ["runtime", "ulissy", "gns", "geospatial", "mobile"]
+categories = ["embedded", "asynchronous"]
+
+[lib]
+name = "gns_runtime"
+path = "src/lib.rs"
+
+[features]
+default = ["tokio-runtime"]
+tokio-runtime = ["tokio"]
+async-std-runtime = ["async-std"]
+mobile = []  # iOS/Android specific features
+
+[dependencies]
+# Async runtime (optional, pick one)
+tokio = { version = "1", features = ["full", "sync", "time"], optional = true }
+async-std = { version = "1.12", optional = true }
+
+# GNS Protocol core
+# gns-crypto-core = { path = "../gns-crypto-core", optional = true }
+
+# H3 geospatial indexing
+h3o = "0.6"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4"
+
+# Cryptographic hashing (for sensor digest)
+sha2 = "0.10"
+
+# Logging
+tracing = "0.1"
+
+# Platform abstractions
+cfg-if = "1.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
