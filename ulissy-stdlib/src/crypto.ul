@@ -1,0 +1,310 @@
+// ulissy/crypto.ul
+// Cryptographic primitives for secure identity and communication
+//
+// Usage:
+//   import ulissy.crypto
+//   identity me = Keychain.primary
+//   let signed = message.sign(me)
+
+// ============================================================================
+// KEY TYPES
+// ============================================================================
+
+/// Ed25519 public key (32 bytes)
+/// Safe to share - this IS your identity
+type PublicKey {
+    bytes: Bytes
+    
+    invariant bytes.length == 32
+    
+    /// Hex-encoded representation
+    computed hex: String = builtin.bytes_to_hex(self.bytes)
+    
+    /// Base58 representation (shorter)
+    computed base58: String = builtin.bytes_to_base58(self.bytes)
+    
+    /// Truncated display (first 8 chars)
+    computed short: String = self.hex.prefix(8)
+}
+
+/// Ed25519 private key (32 bytes)
+/// NEVER leaves the secure enclave
+/// Cannot be serialized, transmitted, or logged
+type PrivateKey {
+    // Internal handle to enclave-stored key
+    handle: builtin.EnclaveHandle
+    
+    /// Get the corresponding public key
+    computed publicKey: PublicKey = builtin.derive_public_key(self.handle)
+}
+
+/// X25519 public key for key exchange
+type X25519PublicKey {
+    bytes: Bytes
+    
+    invariant bytes.length == 32
+}
+
+/// Shared secret from ECDH key exchange
+type SharedSecret {
+    bytes: Bytes
+    
+    invariant bytes.length == 32
+}
+
+// ============================================================================
+// SIGNATURE
+// ============================================================================
+
+/// Ed25519 signature (64 bytes)
+type Signature {
+    bytes: Bytes
+    
+    invariant bytes.length == 64
+    
+    /// Hex-encoded representation
+    computed hex: String = builtin.bytes_to_hex(self.bytes)
+}
+
+/// Verify a signature
+fn verify(signature: Signature, message: Bytes, publicKey: PublicKey) -> Bool {
+    return builtin.ed25519_verify(signature.bytes, message, publicKey.bytes)
+}
+
+/// Extension: signature.verify(message, key)
+extend Signature {
+    fn verify(self, message: Bytes, publicKey: PublicKey) -> Bool {
+        return builtin.ed25519_verify(self.bytes, message, publicKey.bytes)
+    }
+    
+    fn verifyString(self, message: String, publicKey: PublicKey) -> Bool {
+        return builtin.ed25519_verify(self.bytes, message.toBytes(), publicKey.bytes)
+    }
+}
+
+// ============================================================================
+// HASHING
+// ============================================================================
+
+/// SHA-256 hash (32 bytes)
+type Hash {
+    bytes: Bytes
+    
+    invariant bytes.length == 32
+    
+    computed hex: String = builtin.bytes_to_hex(self.bytes)
+    computed short: String = self.hex.prefix(16)
+}
+
+/// Hash bytes with SHA-256
+fn sha256(data: Bytes) -> Hash {
+    return Hash { bytes: builtin.sha256(data) }
+}
+
+/// Hash a string
+fn sha256String(data: String) -> Hash {
+    return sha256(data.toBytes())
+}
+
+/// Hash multiple items together
+fn hashAll(items: Array<Bytes>) -> Hash {
+    var combined: Bytes = []
+    for item in items {
+        combined = combined.concat(item)
+    }
+    return sha256(combined)
+}
+
+// ============================================================================
+// ENCRYPTION
+// ============================================================================
+
+/// Encrypted data (ChaCha20-Poly1305)
+type Ciphertext {
+    data: Bytes      // Encrypted payload
+    nonce: Nonce     // Unique nonce used
+    tag: Bytes       // Authentication tag (16 bytes)
+}
+
+/// Nonce for encryption (12 bytes)
+type Nonce {
+    bytes: Bytes
+    
+    invariant bytes.length == 12
+}
+
+/// Generate a random nonce
+fn randomNonce() -> Nonce {
+    return Nonce { bytes: builtin.random_bytes(12) }
+}
+
+/// Encrypt data with a shared secret
+fn encrypt(plaintext: Bytes, secret: SharedSecret) -> Ciphertext {
+    let nonce = randomNonce()
+    let result = builtin.chacha20_encrypt(plaintext, secret.bytes, nonce.bytes)
+    return Ciphertext {
+        data: result.ciphertext,
+        nonce: nonce,
+        tag: result.tag
+    }
+}
+
+/// Decrypt data with a shared secret
+fn decrypt(ciphertext: Ciphertext, secret: SharedSecret) -> Bytes? {
+    return builtin.chacha20_decrypt(
+        ciphertext.data,
+        ciphertext.tag,
+        secret.bytes,
+        ciphertext.nonce.bytes
+    )
+}
+
+// ============================================================================
+// KEY EXCHANGE (X25519 ECDH)
+// ============================================================================
+
+/// Perform ECDH key exchange
+fn keyExchange(myPrivate: PrivateKey, theirPublic: X25519PublicKey) -> SharedSecret {
+    return builtin.x25519_exchange(myPrivate.handle, theirPublic.bytes)
+}
+
+/// Generate ephemeral key pair for forward secrecy
+fn ephemeralKeyPair() -> (PrivateKey, X25519PublicKey) {
+    return builtin.x25519_generate()
+}
+
+// ============================================================================
+// IDENTITY
+// ============================================================================
+
+/// Complete identity with keys and optional handle
+type Identity {
+    publicKey:  PublicKey
+    privateKey: PrivateKey     // Enclave-bound
+    handle:     Handle?        // GNS @username (optional until claimed)
+    
+    /// Sign bytes
+    fn sign(self, data: Bytes) -> Signature {
+        return builtin.ed25519_sign(data, self.privateKey.handle)
+    }
+    
+    /// Sign a string
+    fn signString(self, message: String) -> Signature {
+        return self.sign(message.toBytes())
+    }
+    
+    /// Verify a signature against this identity
+    fn verify(self, signature: Signature, data: Bytes) -> Bool {
+        return signature.verify(data, self.publicKey)
+    }
+}
+
+// ============================================================================
+// HANDLE (GNS Username)
+// ============================================================================
+
+/// GNS @handle (1-20 lowercase alphanumeric + underscore)
+type Handle {
+    name: String
+    
+    invariant name.length >= 1 && name.length <= 20
+    invariant name.matches("[a-z0-9_]+")
+    
+    /// Full handle with @ prefix
+    computed display: String = "@\(self.name)"
+}
+
+/// Parse a handle string
+fn handle(name: String) -> Handle? {
+    let cleaned = name.trimPrefix("@").lowercase()
+    if cleaned.length < 1 || cleaned.length > 20 {
+        return nil
+    }
+    if !cleaned.matches("[a-z0-9_]+") {
+        return nil
+    }
+    return Handle { name: cleaned }
+}
+
+// ============================================================================
+// KEYCHAIN
+// ============================================================================
+
+/// Secure keychain for identity storage
+type Keychain {
+    /// Primary identity
+    fn primary() -> Identity {
+        return builtin.keychain_primary()
+    }
+    
+    /// Get or create a facet identity
+    fn facet(name: String) -> Identity {
+        return builtin.keychain_facet(name)
+    }
+    
+    /// List all facets
+    fn facets() -> Array<String> {
+        return builtin.keychain_list_facets()
+    }
+    
+    /// Check if identity exists
+    fn exists() -> Bool {
+        return builtin.keychain_exists()
+    }
+    
+    /// Create new identity (first time only)
+    fn create() -> Identity {
+        return builtin.keychain_create()
+    }
+    
+    /// Export recovery phrase (sensitive!)
+    fn exportRecoveryPhrase() -> String {
+        return builtin.keychain_export_mnemonic()
+    }
+    
+    /// Restore from recovery phrase
+    fn restore(mnemonic: String) -> Identity? {
+        return builtin.keychain_restore(mnemonic)
+    }
+}
+
+// ============================================================================
+// SIGNABLE TRAIT
+// ============================================================================
+
+/// Trait for types that can be signed
+trait Signable {
+    fn toSignableBytes(self) -> Bytes
+}
+
+/// Sign any signable value
+fn sign<T: Signable>(value: T, identity: Identity) -> Signature {
+    return identity.sign(value.toSignableBytes())
+}
+
+/// Extension: value.signed(identity)
+extend Signable {
+    fn signed(self, identity: Identity) -> (Self, Signature) {
+        let sig = identity.sign(self.toSignableBytes())
+        return (self, sig)
+    }
+}
+
+// ============================================================================
+// RANDOM
+// ============================================================================
+
+/// Generate random bytes
+fn randomBytes(count: Int) -> Bytes {
+    return builtin.random_bytes(count)
+}
+
+/// Generate random integer in range
+fn randomInt(min: Int, max: Int) -> Int {
+    return builtin.random_int(min, max)
+}
+
+/// Generate UUID v4
+fn uuid() -> String {
+    return builtin.uuid_v4()
+}

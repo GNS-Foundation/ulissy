@@ -1,0 +1,381 @@
+// ulissy/trajectory.ul
+// Proof-of-Trajectory types for GNS Protocol
+//
+// Usage:
+//   import ulissy.trajectory
+//   let crumb = breadcrumb(cell: here.h3(7)).signed(me)
+//   me.trajectory.append(crumb)
+
+import ulissy.crypto
+import ulissy.spatial
+import ulissy.temporal
+import ulissy.sensors
+
+// ============================================================================
+// LOCATION SOURCE
+// ============================================================================
+
+/// Source of location data
+enum LocationSource {
+    gps,        // GPS satellite fix
+    wifi,       // WiFi positioning
+    cell,       // Cell tower triangulation
+    ip,         // IP geolocation
+    manual,     // User-entered location
+    fused       // Combined sources
+}
+
+// ============================================================================
+// BREADCRUMB
+// ============================================================================
+
+/// A single location proof in the trajectory chain
+type Breadcrumb {
+    index: Uint64             // Sequential index in trajectory
+    timestamp: Moment         // When collected
+    cell: H3Cell              // Quantized location
+    source: LocationSource    // How location was obtained
+    context: Hash             // Sensor context digest
+    previousHash: Hash        // Hash of previous breadcrumb (chain link)
+    signature: Signature      // Ed25519 signature by owner
+    
+    /// Hash of this breadcrumb
+    computed hash: Hash = sha256(self.toBytes())
+    
+    /// Validate signature
+    fn verify(self, owner: PublicKey) -> Bool {
+        let signableData = self.toSignableBytes()
+        return self.signature.verify(signableData, owner)
+    }
+    
+    fn toSignableBytes(self) -> Bytes {
+        return builtin.breadcrumb_signable_bytes(self)
+    }
+    
+    fn toBytes(self) -> Bytes {
+        return builtin.breadcrumb_to_bytes(self)
+    }
+    
+    /// Validate chain link to previous
+    fn validChainLink(self, previous: Breadcrumb?) -> Bool {
+        if previous == nil {
+            return self.previousHash.hex == "genesis" || self.index == 0
+        }
+        return self.previousHash.hex == previous!.hash.hex
+    }
+    
+    /// Validate temporal ordering
+    fn validTimestamp(self, previous: Breadcrumb?) -> Bool {
+        if previous == nil { return true }
+        return self.timestamp.isAfter(previous!.timestamp)
+    }
+    
+    /// Validate spatial reachability
+    fn validReachability(self, previous: Breadcrumb?, maxSpeed: Float = 150.0) -> Bool {
+        if previous == nil { return true }
+        let timeDiff = self.timestamp.since(previous!.timestamp)
+        return reachable(previous!.cell, self.cell, timeDiff, maxSpeed)
+    }
+    
+    invariant timestamp.timestamp > 0
+    invariant index >= 0
+}
+
+/// Create a breadcrumb (before signing)
+fn breadcrumb(
+    cell: H3Cell,
+    source: LocationSource = .gps,
+    context: Hash? = nil,
+    previous: Hash? = nil,
+    index: Uint64 = 0
+) -> UnsignedBreadcrumb {
+    return UnsignedBreadcrumb {
+        index: index,
+        timestamp: now,
+        cell: cell,
+        source: source,
+        context: context ?? sensors.digest(),
+        previousHash: previous ?? Hash { bytes: "genesis".toBytes().sha256() }
+    }
+}
+
+/// Breadcrumb before signing
+type UnsignedBreadcrumb {
+    index: Uint64
+    timestamp: Moment
+    cell: H3Cell
+    source: LocationSource
+    context: Hash
+    previousHash: Hash
+    
+    /// Sign this breadcrumb
+    fn signed(self, identity: Identity) -> Breadcrumb {
+        let signableData = builtin.unsigned_breadcrumb_signable_bytes(self)
+        let signature = identity.sign(signableData)
+        
+        return Breadcrumb {
+            index: self.index,
+            timestamp: self.timestamp,
+            cell: self.cell,
+            source: self.source,
+            context: self.context,
+            previousHash: self.previousHash,
+            signature: signature
+        }
+    }
+}
+
+// ============================================================================
+// TRAJECTORY
+// ============================================================================
+
+/// A chain of breadcrumbs proving trajectory
+type Trajectory {
+    owner: PublicKey              // Identity that owns this trajectory
+    breadcrumbs: Array<Breadcrumb>
+    epochs: Array<Epoch>
+    
+    /// Total breadcrumb count
+    computed count: Int = self.breadcrumbs.length
+    
+    /// Breadcrumbs not yet in an epoch
+    computed pending: Int = self.breadcrumbs.length - self.publishedCount
+    
+    /// Breadcrumbs in published epochs
+    computed publishedCount: Int = {
+        var count = 0
+        for epoch in self.epochs {
+            count = count + epoch.breadcrumbs.length
+        }
+        return count
+    }
+    
+    /// Last breadcrumb (if any)
+    computed last: Breadcrumb? = self.breadcrumbs.last
+    
+    /// Last hash (for chaining)
+    computed lastHash: Hash? = self.last?.hash
+    
+    /// First breadcrumb (if any)
+    computed first: Breadcrumb? = self.breadcrumbs.first
+    
+    /// Check if trajectory meets handle threshold
+    computed meetsHandleThreshold: Bool = self.publishedCount >= 100
+    
+    /// Append a new breadcrumb
+    fn append(self, crumb: Breadcrumb) -> Result<Trajectory, String> {
+        // Validate chain link
+        if !crumb.validChainLink(self.last) {
+            return Result.error("Invalid chain link")
+        }
+        
+        // Validate timestamp
+        if !crumb.validTimestamp(self.last) {
+            return Result.error("Invalid timestamp ordering")
+        }
+        
+        // Validate reachability
+        if !crumb.validReachability(self.last) {
+            return Result.error("Location unreachable in time")
+        }
+        
+        // Validate signature
+        if !crumb.verify(self.owner) {
+            return Result.error("Invalid signature")
+        }
+        
+        var newTrajectory = self
+        newTrajectory.breadcrumbs.append(crumb)
+        return Result.ok(newTrajectory)
+    }
+    
+    /// Bundle pending breadcrumbs into an epoch
+    fn bundleEpoch(self) -> Epoch? {
+        let pendingCrumbs = self.getPendingBreadcrumbs()
+        if pendingCrumbs.length < 1 {
+            return nil
+        }
+        
+        return Epoch {
+            id: uuid(),
+            owner: self.owner,
+            breadcrumbs: pendingCrumbs,
+            startTime: pendingCrumbs.first!.timestamp,
+            endTime: pendingCrumbs.last!.timestamp,
+            merkleRoot: computeMerkleRoot(pendingCrumbs),
+            signature: Signature { bytes: [] }  // Needs to be signed
+        }
+    }
+    
+    fn getPendingBreadcrumbs(self) -> Array<Breadcrumb> {
+        // Get breadcrumbs not in any epoch
+        return builtin.trajectory_pending_breadcrumbs(self)
+    }
+}
+
+// ============================================================================
+// EPOCH
+// ============================================================================
+
+/// A bundle of breadcrumbs for publishing
+type Epoch {
+    id: String
+    owner: PublicKey
+    breadcrumbs: Array<Breadcrumb>
+    startTime: Moment
+    endTime: Moment
+    merkleRoot: Hash          // Merkle root of breadcrumb hashes
+    signature: Signature      // Owner's signature
+    
+    computed count: Int = self.breadcrumbs.length
+    computed duration: Duration = self.endTime.since(self.startTime)
+    
+    /// Sign this epoch
+    fn signed(self, identity: Identity) -> Epoch {
+        let signableData = builtin.epoch_signable_bytes(self)
+        var signedEpoch = self
+        signedEpoch.signature = identity.sign(signableData)
+        return signedEpoch
+    }
+    
+    /// Verify epoch signature
+    fn verify(self) -> Bool {
+        let signableData = builtin.epoch_signable_bytes(self)
+        return self.signature.verify(signableData, self.owner)
+    }
+}
+
+/// Compute merkle root of breadcrumbs
+fn computeMerkleRoot(breadcrumbs: Array<Breadcrumb>) -> Hash {
+    return builtin.compute_merkle_root(breadcrumbs)
+}
+
+// ============================================================================
+// TRAJECTORY EXTENSION FOR IDENTITY
+// ============================================================================
+
+/// Add trajectory to identity
+extend Identity {
+    computed trajectory: Trajectory = builtin.identity_trajectory(self)
+}
+
+// ============================================================================
+// COLLECTION STATUS
+// ============================================================================
+
+/// Status of breadcrumb collection
+type CollectionStatus {
+    isActive: Bool
+    totalCount: Int
+    pendingCount: Int
+    epochCount: Int
+    lastCollection: Moment?
+    nextCollection: Moment?
+    
+    computed progress: Float = Float(self.pendingCount) / 100.0
+    computed readyForEpoch: Bool = self.pendingCount >= 100
+}
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+/// Validate entire trajectory
+fn validateTrajectory(trajectory: Trajectory) -> Result<Bool, String> {
+    var previous: Breadcrumb? = nil
+    
+    for crumb in trajectory.breadcrumbs {
+        // Check chain link
+        if !crumb.validChainLink(previous) {
+            return Result.error("Broken chain at index \(crumb.index)")
+        }
+        
+        // Check timestamp
+        if !crumb.validTimestamp(previous) {
+            return Result.error("Invalid timestamp at index \(crumb.index)")
+        }
+        
+        // Check reachability
+        if !crumb.validReachability(previous) {
+            return Result.error("Unreachable location at index \(crumb.index)")
+        }
+        
+        // Check signature
+        if !crumb.verify(trajectory.owner) {
+            return Result.error("Invalid signature at index \(crumb.index)")
+        }
+        
+        previous = crumb
+    }
+    
+    return Result.ok(true)
+}
+
+/// Validate a single epoch
+fn validateEpoch(epoch: Epoch) -> Result<Bool, String> {
+    // Verify signature
+    if !epoch.verify() {
+        return Result.error("Invalid epoch signature")
+    }
+    
+    // Verify merkle root
+    let computedRoot = computeMerkleRoot(epoch.breadcrumbs)
+    if computedRoot.hex != epoch.merkleRoot.hex {
+        return Result.error("Invalid merkle root")
+    }
+    
+    // Validate internal breadcrumbs
+    var previous: Breadcrumb? = nil
+    for crumb in epoch.breadcrumbs {
+        if !crumb.validChainLink(previous) {
+            return Result.error("Broken chain in epoch")
+        }
+        previous = crumb
+    }
+    
+    return Result.ok(true)
+}
+
+// ============================================================================
+// HANDLE CLAIM
+// ============================================================================
+
+/// Proof required to claim a handle
+type HandleClaimProof {
+    identity: PublicKey
+    handle: Handle
+    epochs: Array<Epoch>
+    totalBreadcrumbs: Int
+    signature: Signature
+    
+    computed isValid: Bool = self.totalBreadcrumbs >= 100
+}
+
+/// Create handle claim proof
+fn createHandleClaimProof(
+    identity: Identity,
+    handle: Handle,
+    epochs: Array<Epoch>
+) -> HandleClaimProof? {
+    var total = 0
+    for epoch in epochs {
+        total = total + epoch.count
+    }
+    
+    if total < 100 {
+        return nil  // Not enough breadcrumbs
+    }
+    
+    var proof = HandleClaimProof {
+        identity: identity.publicKey,
+        handle: handle,
+        epochs: epochs,
+        totalBreadcrumbs: total,
+        signature: Signature { bytes: [] }
+    }
+    
+    let signableData = builtin.claim_proof_signable_bytes(proof)
+    proof.signature = identity.sign(signableData)
+    
+    return proof
+}

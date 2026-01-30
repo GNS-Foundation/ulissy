@@ -1,0 +1,286 @@
+// ulissy/temporal.ul
+// Time and duration types for temporal programming
+//
+// Usage:
+//   import ulissy.temporal
+//   every 10.minutes { ... }
+//   after 5.seconds { ... }
+
+// ============================================================================
+// DURATION
+// ============================================================================
+
+/// Time duration with unit awareness
+type Duration {
+    milliseconds: Int
+    
+    invariant milliseconds >= 0
+    
+    computed seconds: Int = self.milliseconds / 1000
+    computed minutes: Int = self.milliseconds / 60000
+    computed hours: Int = self.milliseconds / 3600000
+    computed days: Int = self.milliseconds / 86400000
+    
+    computed asSeconds: Float = Float(self.milliseconds) / 1000.0
+    computed asMinutes: Float = Float(self.milliseconds) / 60000.0
+    computed asHours: Float = Float(self.milliseconds) / 3600000.0
+    computed asDays: Float = Float(self.milliseconds) / 86400000.0
+}
+
+/// Duration from milliseconds
+fn millis(value: Int) -> Duration {
+    return Duration { milliseconds: value }
+}
+
+/// Duration from seconds
+fn seconds(value: Int) -> Duration {
+    return Duration { milliseconds: value * 1000 }
+}
+
+/// Duration from minutes
+fn minutes(value: Int) -> Duration {
+    return Duration { milliseconds: value * 60000 }
+}
+
+/// Duration from hours
+fn hours(value: Int) -> Duration {
+    return Duration { milliseconds: value * 3600000 }
+}
+
+/// Duration from days
+fn days(value: Int) -> Duration {
+    return Duration { milliseconds: value * 86400000 }
+}
+
+/// Zero duration
+const zeroDuration: Duration = Duration { milliseconds: 0 }
+
+/// Extension for numeric literals: 10.minutes
+extend Int {
+    computed milliseconds: Duration = Duration { milliseconds: self }
+    computed seconds: Duration = Duration { milliseconds: self * 1000 }
+    computed minutes: Duration = Duration { milliseconds: self * 60000 }
+    computed hours: Duration = Duration { milliseconds: self * 3600000 }
+    computed days: Duration = Duration { milliseconds: self * 86400000 }
+}
+
+/// Duration arithmetic
+fn add(a: Duration, b: Duration) -> Duration {
+    return Duration { milliseconds: a.milliseconds + b.milliseconds }
+}
+
+fn subtract(a: Duration, b: Duration) -> Duration {
+    let result = a.milliseconds - b.milliseconds
+    return Duration { milliseconds: max(0, result) }
+}
+
+fn multiply(d: Duration, factor: Int) -> Duration {
+    return Duration { milliseconds: d.milliseconds * factor }
+}
+
+fn divide(d: Duration, divisor: Int) -> Duration {
+    return Duration { milliseconds: d.milliseconds / divisor }
+}
+
+// ============================================================================
+// MOMENT (Instant in Time)
+// ============================================================================
+
+/// A specific instant in time
+type Moment {
+    timestamp: Int    // Unix milliseconds
+    
+    /// ISO 8601 formatted string
+    computed iso8601: String = builtin.format_iso8601(self.timestamp)
+    
+    /// Human-readable relative time ("5 minutes ago")
+    computed relative: String = builtin.format_relative(self.timestamp)
+    
+    /// Date components
+    computed year: Int = builtin.date_year(self.timestamp)
+    computed month: Int = builtin.date_month(self.timestamp)
+    computed day: Int = builtin.date_day(self.timestamp)
+    computed hour: Int = builtin.date_hour(self.timestamp)
+    computed minute: Int = builtin.date_minute(self.timestamp)
+    computed second: Int = builtin.date_second(self.timestamp)
+    
+    /// Day of week (1 = Monday, 7 = Sunday)
+    computed weekday: Int = builtin.date_weekday(self.timestamp)
+}
+
+/// Current moment
+/// ULissy: `now`
+const now: Moment = builtin.moment_now()
+
+/// Create moment from Unix timestamp (seconds)
+fn fromUnix(seconds: Int) -> Moment {
+    return Moment { timestamp: seconds * 1000 }
+}
+
+/// Create moment from Unix milliseconds
+fn fromUnixMillis(milliseconds: Int) -> Moment {
+    return Moment { timestamp: milliseconds }
+}
+
+/// Parse ISO 8601 string
+fn parseISO(isoString: String) -> Moment? {
+    return builtin.parse_iso8601(isoString)
+}
+
+// ============================================================================
+// MOMENT ARITHMETIC
+// ============================================================================
+
+/// Add duration to moment
+fn add(m: Moment, d: Duration) -> Moment {
+    return Moment { timestamp: m.timestamp + d.milliseconds }
+}
+
+/// Subtract duration from moment
+fn subtract(m: Moment, d: Duration) -> Moment {
+    return Moment { timestamp: m.timestamp - d.milliseconds }
+}
+
+/// Duration between two moments
+fn between(a: Moment, b: Moment) -> Duration {
+    let diff = b.timestamp - a.timestamp
+    return Duration { milliseconds: abs(diff) }
+}
+
+/// Extension: moment + duration
+extend Moment {
+    fn plus(self, d: Duration) -> Moment {
+        return add(self, d)
+    }
+    
+    fn minus(self, d: Duration) -> Moment {
+        return subtract(self, d)
+    }
+    
+    fn since(self, other: Moment) -> Duration {
+        return between(other, self)
+    }
+    
+    fn until(self, other: Moment) -> Duration {
+        return between(self, other)
+    }
+    
+    fn isBefore(self, other: Moment) -> Bool {
+        return self.timestamp < other.timestamp
+    }
+    
+    fn isAfter(self, other: Moment) -> Bool {
+        return self.timestamp > other.timestamp
+    }
+}
+
+// ============================================================================
+// COMPARISON
+// ============================================================================
+
+fn earlier(a: Moment, b: Moment) -> Moment {
+    if a.timestamp <= b.timestamp { return a }
+    return b
+}
+
+fn later(a: Moment, b: Moment) -> Moment {
+    if a.timestamp >= b.timestamp { return a }
+    return b
+}
+
+// ============================================================================
+// TIME ZONES
+// ============================================================================
+
+/// Timezone representation
+type Timezone {
+    identifier: String    // e.g., "America/New_York"
+    offsetMinutes: Int    // Offset from UTC
+}
+
+/// UTC timezone
+const utc: Timezone = Timezone { 
+    identifier: "UTC", 
+    offsetMinutes: 0 
+}
+
+/// Local timezone
+const localTimezone: Timezone = builtin.local_timezone()
+
+/// Convert moment to different timezone (for display)
+fn inTimezone(m: Moment, tz: Timezone) -> Moment {
+    return builtin.moment_in_timezone(m.timestamp, tz.identifier)
+}
+
+// ============================================================================
+// SCHEDULING HELPERS
+// ============================================================================
+
+/// Create a recurring interval specification
+type Interval {
+    duration: Duration
+    condition: (() -> Bool)?
+}
+
+/// Create interval for `every` blocks
+fn interval(d: Duration) -> Interval {
+    return Interval { duration: d, condition: nil }
+}
+
+/// Add condition to interval
+fn when(i: Interval, cond: () -> Bool) -> Interval {
+    return Interval { duration: i.duration, condition: cond }
+}
+
+// ============================================================================
+// TIMEOUT
+// ============================================================================
+
+/// Timeout specification
+type Timeout {
+    duration: Duration
+}
+
+/// Create timeout
+fn timeout(d: Duration) -> Timeout {
+    return Timeout { duration: d }
+}
+
+// ============================================================================
+// DATE HELPERS
+// ============================================================================
+
+/// Start of current day (midnight)
+fn startOfDay(m: Moment) -> Moment {
+    return builtin.start_of_day(m.timestamp)
+}
+
+/// Start of current week (Monday)
+fn startOfWeek(m: Moment) -> Moment {
+    return builtin.start_of_week(m.timestamp)
+}
+
+/// Start of current month
+fn startOfMonth(m: Moment) -> Moment {
+    return builtin.start_of_month(m.timestamp)
+}
+
+/// Check if two moments are on the same day
+fn sameDay(a: Moment, b: Moment) -> Bool {
+    return a.year == b.year && a.month == b.month && a.day == b.day
+}
+
+/// Check if moment is today
+fn isToday(m: Moment) -> Bool {
+    return sameDay(m, now)
+}
+
+/// Check if moment is in the past
+fn isPast(m: Moment) -> Bool {
+    return m.isBefore(now)
+}
+
+/// Check if moment is in the future
+fn isFuture(m: Moment) -> Bool {
+    return m.isAfter(now)
+}

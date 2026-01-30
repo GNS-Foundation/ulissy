@@ -1,0 +1,367 @@
+// ulissy/sensors.ul
+// Device sensors and system state
+//
+// Usage:
+//   import ulissy.sensors
+//   every 10.minutes when battery > 20 { ... }
+
+import ulissy.crypto
+
+// ============================================================================
+// BATTERY
+// ============================================================================
+
+/// Battery level as percentage (0-100)
+type Percent {
+    value: Float
+    
+    invariant value >= 0 && value <= 100
+    
+    computed asInt: Int = Int(self.value)
+    computed asFraction: Float = self.value / 100.0
+}
+
+/// Create percent from value
+fn percent(value: Float) -> Percent {
+    return Percent { value: clamp(value, 0.0, 100.0) }
+}
+
+/// Extension for literals: 80.percent
+extend Int {
+    computed percent: Percent = Percent { value: Float(self) }
+}
+
+extend Float {
+    computed percent: Percent = Percent { value: self }
+}
+
+/// Battery level (alias for clarity)
+type BatteryLevel = Percent
+
+/// Power mode
+enum PowerMode {
+    low,          // Low power mode active
+    normal,       // Normal operation
+    performance   // Maximum performance
+}
+
+/// Battery state
+type BatteryState {
+    level: Percent
+    isCharging: Bool
+    powerMode: PowerMode
+    
+    computed isLow: Bool = self.level.value < 20
+    computed isCritical: Bool = self.level.value < 5
+    computed isFull: Bool = self.level.value > 95
+}
+
+/// Battery service
+type Battery {
+    /// Get current battery level
+    fn level() -> Percent {
+        return builtin.battery_level()
+    }
+    
+    /// Get full battery state
+    fn state() -> BatteryState {
+        return builtin.battery_state()
+    }
+    
+    /// Check if charging
+    fn isCharging() -> Bool {
+        return builtin.battery_charging()
+    }
+    
+    /// Get power mode
+    fn powerMode() -> PowerMode {
+        return builtin.power_mode()
+    }
+    
+    /// Check if battery is sufficient for operation
+    fn isSufficient(threshold: Percent = 20.percent) -> Bool {
+        return Battery.level().value >= threshold.value
+    }
+}
+
+/// Global battery accessor
+/// ULissy: `battery > 20`
+const battery: Percent = Battery.level()
+
+// ============================================================================
+// GPS
+// ============================================================================
+
+/// GPS state
+enum GpsState {
+    unavailable,      // GPS hardware not available
+    disabled,         // GPS disabled by user
+    denied,           // Permission denied
+    searching,        // Searching for satellites
+    available         // GPS fix available
+}
+
+/// GPS service
+type Gps {
+    /// Check if GPS is available
+    fn available() -> Bool {
+        return Gps.state() == .available
+    }
+    
+    /// Get GPS state
+    fn state() -> GpsState {
+        return builtin.gps_state()
+    }
+    
+    /// Request GPS permission
+    fn requestPermission() -> Bool {
+        return builtin.gps_request_permission()
+    }
+    
+    /// Get accuracy in meters
+    fn accuracy() -> Float? {
+        return builtin.gps_accuracy()
+    }
+}
+
+/// Global GPS accessor
+/// ULissy: `gps.available`
+const gps: Gps = Gps {}
+
+// ============================================================================
+// CONNECTIVITY
+// ============================================================================
+
+/// Network connectivity type
+enum ConnectivityType {
+    none,
+    wifi,
+    cellular,
+    ethernet,
+    unknown
+}
+
+/// Connectivity state
+type ConnectivityState {
+    type: ConnectivityType
+    isConnected: Bool
+    isWifi: Bool
+    isMetered: Bool    // Cellular usually metered
+}
+
+/// Connectivity service
+type Connectivity {
+    /// Check if network is available
+    fn available() -> Bool {
+        return Connectivity.state().isConnected
+    }
+    
+    /// Get connectivity state
+    fn state() -> ConnectivityState {
+        return builtin.connectivity_state()
+    }
+    
+    /// Check if on WiFi
+    fn isWifi() -> Bool {
+        return Connectivity.state().isWifi
+    }
+    
+    /// Check if connection is metered
+    fn isMetered() -> Bool {
+        return Connectivity.state().isMetered
+    }
+}
+
+/// Global connectivity accessor
+const connectivity: Connectivity = Connectivity {}
+
+// ============================================================================
+// MOTION SENSORS
+// ============================================================================
+
+/// 3D vector for sensor data
+type Vector3 {
+    x: Float
+    y: Float
+    z: Float
+    
+    computed magnitude: Float = sqrt(x*x + y*y + z*z)
+}
+
+/// Accelerometer data
+type AccelerometerData {
+    acceleration: Vector3     // In g (9.81 m/s²)
+    timestamp: Int
+    
+    /// Check if device is stationary
+    computed isStationary: Bool = 
+        abs(self.acceleration.magnitude - 1.0) < 0.1
+    
+    /// Check if device is in motion
+    computed isMoving: Bool = !self.isStationary
+}
+
+/// Gyroscope data
+type GyroscopeData {
+    rotation: Vector3         // In radians/second
+    timestamp: Int
+}
+
+/// Magnetometer data
+type MagnetometerData {
+    field: Vector3           // In microtesla
+    timestamp: Int
+}
+
+/// Motion sensors service
+type Motion {
+    /// Get current accelerometer data
+    fn accelerometer() -> AccelerometerData? {
+        return builtin.accelerometer_data()
+    }
+    
+    /// Get current gyroscope data
+    fn gyroscope() -> GyroscopeData? {
+        return builtin.gyroscope_data()
+    }
+    
+    /// Get current magnetometer data
+    fn magnetometer() -> MagnetometerData? {
+        return builtin.magnetometer_data()
+    }
+    
+    /// Check if device is stationary
+    fn isStationary() -> Bool {
+        let accel = Motion.accelerometer()
+        if accel == nil { return false }
+        return accel!.isStationary
+    }
+}
+
+// ============================================================================
+// SENSOR CONTEXT
+// ============================================================================
+
+/// Aggregated sensor context for breadcrumbs
+type SensorContext {
+    wifiSignatures: Array<String>       // Hashed BSSIDs
+    cellTowers: Array<String>           // Cell tower IDs
+    bluetoothSignatures: Array<String>  // Hashed BT devices
+    accelerometerMagnitude: Float?
+    barometricPressure: Float?
+    ambientLight: Float?
+    timestamp: Int
+}
+
+/// Sensors service
+type Sensors {
+    /// Get current sensor context
+    fn current() -> SensorContext {
+        return builtin.sensor_context()
+    }
+    
+    /// Get cryptographic digest of sensor context
+    fn digest() -> Hash {
+        let ctx = Sensors.current()
+        return builtin.sensor_digest(ctx)
+    }
+    
+    /// Check if sensors are available
+    fn available() -> Bool {
+        return builtin.sensors_available()
+    }
+}
+
+/// Global sensors accessor
+/// ULissy: `sensors.digest`
+const sensors: Sensors = Sensors {}
+
+// ============================================================================
+// BAROMETER
+// ============================================================================
+
+/// Barometric pressure data
+type BarometerData {
+    pressure: Float           // In hectopascals (hPa)
+    altitude: Float?          // Estimated altitude in meters
+    timestamp: Int
+}
+
+/// Barometer service
+type Barometer {
+    /// Get current pressure
+    fn pressure() -> Float? {
+        let data = Barometer.data()
+        if data == nil { return nil }
+        return data!.pressure
+    }
+    
+    /// Get full barometer data
+    fn data() -> BarometerData? {
+        return builtin.barometer_data()
+    }
+    
+    /// Check if barometer is available
+    fn available() -> Bool {
+        return builtin.barometer_available()
+    }
+}
+
+// ============================================================================
+// AMBIENT LIGHT
+// ============================================================================
+
+/// Light sensor data
+type LightData {
+    lux: Float               // Light level in lux
+    timestamp: Int
+}
+
+/// Light sensor service
+type Light {
+    /// Get current light level
+    fn level() -> Float? {
+        let data = Light.data()
+        if data == nil { return nil }
+        return data!.lux
+    }
+    
+    /// Get full light data
+    fn data() -> LightData? {
+        return builtin.light_data()
+    }
+    
+    /// Check if light sensor is available
+    fn available() -> Bool {
+        return builtin.light_available()
+    }
+}
+
+// ============================================================================
+// PEDOMETER
+// ============================================================================
+
+/// Pedometer data
+type PedometerData {
+    steps: Int               // Step count
+    distance: Float          // Estimated distance in meters
+    timestamp: Int
+}
+
+/// Pedometer service
+type Pedometer {
+    /// Get step count today
+    fn stepsToday() -> Int {
+        return builtin.pedometer_steps_today()
+    }
+    
+    /// Get step count for period
+    fn steps(since: Moment) -> Int {
+        return builtin.pedometer_steps_since(since.timestamp)
+    }
+    
+    /// Check if pedometer is available
+    fn available() -> Bool {
+        return builtin.pedometer_available()
+    }
+}

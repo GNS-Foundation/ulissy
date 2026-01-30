@@ -1,0 +1,129 @@
+// ulissy/prelude.ul
+// Prelude module - imports everything commonly needed
+//
+// Usage:
+//   import ulissy.prelude
+//
+// This imports all core types and commonly used modules
+
+// Re-export core types (always available)
+export ulissy.core.*
+
+// Re-export spatial types
+export ulissy.spatial.{
+    Coordinates,
+    H3Cell,
+    Resolution,
+    Distance,
+    Heading,
+    Location,
+    here,
+    meters,
+    kilometers,
+    miles,
+    h3,
+    cellDistance,
+    neighbors,
+    reachable
+}
+
+// Re-export crypto types
+export ulissy.crypto.{
+    PublicKey,
+    PrivateKey,
+    Signature,
+    Hash,
+    SharedSecret,
+    Ciphertext,
+    Nonce,
+    Identity,
+    Handle,
+    Keychain,
+    sha256,
+    sign,
+    verify,
+    encrypt,
+    decrypt,
+    randomBytes,
+    uuid
+}
+
+// Re-export temporal types
+export ulissy.temporal.{
+    Duration,
+    Moment,
+    Interval,
+    Timeout,
+    now,
+    millis,
+    seconds,
+    minutes,
+    hours,
+    days,
+    timeout
+}
+
+// Re-export sensor types
+export ulissy.sensors.{
+    Percent,
+    Battery,
+    BatteryState,
+    PowerMode,
+    Gps,
+    GpsState,
+    Connectivity,
+    Sensors,
+    SensorContext,
+    battery,
+    gps,
+    connectivity,
+    sensors
+}
+
+// Re-export trajectory types
+export ulissy.trajectory.{
+    LocationSource,
+    Breadcrumb,
+    UnsignedBreadcrumb,
+    Trajectory,
+    Epoch,
+    CollectionStatus,
+    breadcrumb,
+    validateTrajectory,
+    validateEpoch
+}
+
+// Re-export messaging types
+export ulissy.messaging.{
+    Message,
+    Envelope,
+    Visibility,
+    Conversation,
+    FacetAddress,
+    DixFacet,
+    HomeFacet,
+    PayFacet,
+    EmailFacet,
+    seal,
+    open,
+    sendMessage,
+    dix,
+    home,
+    pay,
+    email
+}
+
+// Re-export network types
+export ulissy.network.{
+    Network,
+    SyncStatus,
+    PublishResult,
+    GnsRecord,
+    RelayChannel,
+    network,
+    lookupHandle,
+    lookupKey,
+    resolveHandle,
+    resolveKey,
+    broadcast
+}

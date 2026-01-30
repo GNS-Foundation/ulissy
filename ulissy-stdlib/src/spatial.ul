@@ -1,0 +1,257 @@
+// ulissy/spatial.ul
+// Spatial types and functions for location-aware computing
+// 
+// Usage:
+//   import ulissy.spatial
+//   let cell = here.h3(7)
+
+// ============================================================================
+// COORDINATES (Restricted Type)
+// ============================================================================
+
+/// Raw GPS coordinates - CANNOT be transmitted or serialized
+/// Must be quantized to H3Cell before sharing
+type Coordinates {
+    latitude:  Float      // -90 to 90
+    longitude: Float      // -180 to 180
+    altitude:  Float?     // Meters above sea level
+    accuracy:  Float?     // Horizontal accuracy in meters
+    
+    invariant latitude >= -90 && latitude <= 90
+    invariant longitude >= -180 && longitude <= 180
+}
+
+/// Create coordinates from lat/lng
+fn coordinates(lat: Float, lng: Float) -> Coordinates {
+    return Coordinates {
+        latitude: lat,
+        longitude: lng,
+        altitude: nil,
+        accuracy: nil
+    }
+}
+
+// ============================================================================
+// H3 CELL (Safe Type)
+// ============================================================================
+
+/// H3 hexagonal cell index - safe to transmit and store
+/// Privacy-preserving location representation
+type H3Cell {
+    index: Uint64         // Raw H3 index
+    
+    /// Get the resolution (0-15)
+    computed resolution: Int = builtin.h3_resolution(self.index)
+    
+    /// Get center coordinates (for display only)
+    computed center: Coordinates = builtin.h3_center(self.index)
+    
+    /// Get area in square meters
+    computed area: Float = builtin.h3_area(self.index)
+}
+
+/// H3 resolution levels
+enum Resolution {
+    continental = 0,      // ~4,250,000 km²
+    subContinental = 1,   // ~600,000 km²
+    large = 2,            // ~85,000 km²
+    regional = 3,         // ~12,000 km²
+    subRegional = 4,      // ~1,770 km²
+    metropolitan = 5,     // ~250 km²
+    city = 6,             // ~36 km²
+    neighborhood = 7,     // ~5 km² (GNS default)
+    district = 8,         // ~0.7 km²
+    block = 9,            // ~0.1 km²
+    subBlock = 10,        // ~15,000 m²
+    building = 11,        // ~2,000 m²
+    entrance = 12,        // ~300 m²
+    room = 13,            // ~43 m²
+    desk = 14,            // ~6 m²
+    precise = 15          // ~0.9 m²
+}
+
+// ============================================================================
+// COORDINATE → H3 CONVERSION
+// ============================================================================
+
+/// Convert coordinates to H3 cell at given resolution
+/// This is the privacy-preserving quantization operation
+fn h3(coords: Coordinates, resolution: Int) -> H3Cell {
+    return builtin.coords_to_h3(coords, resolution)
+}
+
+/// Extension: coords.h3(7)
+extend Coordinates {
+    fn h3(self, resolution: Int) -> H3Cell {
+        return builtin.coords_to_h3(self, resolution)
+    }
+}
+
+// ============================================================================
+// H3 OPERATIONS
+// ============================================================================
+
+/// Check if two cells are neighbors
+fn neighbors(a: H3Cell, b: H3Cell) -> Bool {
+    return builtin.h3_neighbors(a.index, b.index)
+}
+
+/// Get distance between cell centers
+fn cellDistance(a: H3Cell, b: H3Cell) -> Distance {
+    return builtin.h3_distance(a.index, b.index)
+}
+
+/// Get parent cell at lower resolution
+fn parent(cell: H3Cell, resolution: Int) -> H3Cell? {
+    if resolution >= cell.resolution {
+        return nil
+    }
+    return builtin.h3_parent(cell.index, resolution)
+}
+
+/// Get child cells at higher resolution
+fn children(cell: H3Cell, resolution: Int) -> Array<H3Cell> {
+    if resolution <= cell.resolution {
+        return []
+    }
+    return builtin.h3_children(cell.index, resolution)
+}
+
+/// Get ring of cells at distance k
+fn ring(cell: H3Cell, k: Int) -> Array<H3Cell> {
+    return builtin.h3_ring(cell.index, k)
+}
+
+/// Check if cell is within k cells of another
+fn withinRange(a: H3Cell, b: H3Cell, k: Int) -> Bool {
+    return builtin.h3_grid_distance(a.index, b.index) <= k
+}
+
+/// Check if a cell is reachable from another within a time period
+/// (Used for breadcrumb validation)
+fn reachable(from: H3Cell, to: H3Cell, within: Duration, maxSpeed: Float = 150.0) -> Bool {
+    let dist = cellDistance(from, to)
+    let maxDist = maxSpeed * within.asHours() * 1000.0  // Convert to meters
+    return dist.asMeters() <= maxDist
+}
+
+// ============================================================================
+// DISTANCE
+// ============================================================================
+
+/// Distance with unit awareness
+type Distance {
+    meters: Float
+    
+    computed kilometers: Float = self.meters / 1000.0
+    computed miles: Float = self.meters / 1609.344
+    computed feet: Float = self.meters / 0.3048
+}
+
+/// Create distance in meters
+fn meters(value: Float) -> Distance {
+    return Distance { meters: value }
+}
+
+/// Create distance in kilometers
+fn kilometers(value: Float) -> Distance {
+    return Distance { meters: value * 1000.0 }
+}
+
+/// Create distance in miles
+fn miles(value: Float) -> Distance {
+    return Distance { meters: value * 1609.344 }
+}
+
+/// Extension for numeric literals: 500.meters
+extend Int {
+    computed meters: Distance = Distance { meters: Float(self) }
+    computed kilometers: Distance = Distance { meters: Float(self) * 1000.0 }
+    computed miles: Distance = Distance { meters: Float(self) * 1609.344 }
+}
+
+extend Float {
+    computed meters: Distance = Distance { meters: self }
+    computed kilometers: Distance = Distance { meters: self * 1000.0 }
+    computed miles: Distance = Distance { meters: self * 1609.344 }
+}
+
+// ============================================================================
+// HEADING
+// ============================================================================
+
+/// Compass heading in degrees
+type Heading {
+    degrees: Float    // 0-360, 0 = North, 90 = East
+    
+    invariant degrees >= 0 && degrees < 360
+    
+    computed cardinal: String = 
+        if self.degrees < 22.5 || self.degrees >= 337.5 { "N" }
+        else if self.degrees < 67.5 { "NE" }
+        else if self.degrees < 112.5 { "E" }
+        else if self.degrees < 157.5 { "SE" }
+        else if self.degrees < 202.5 { "S" }
+        else if self.degrees < 247.5 { "SW" }
+        else if self.degrees < 292.5 { "W" }
+        else { "NW" }
+}
+
+// ============================================================================
+// LOCATION SERVICE
+// ============================================================================
+
+/// Current location accessor
+/// ULissy: `here`
+const here: Coordinates = builtin.location_current()
+
+/// Location service for more control
+type Location {
+    /// Get current coordinates
+    fn current() -> Coordinates {
+        return builtin.location_current()
+    }
+    
+    /// Check if GPS is available
+    fn available() -> Bool {
+        return builtin.gps_available()
+    }
+    
+    /// Request location with specific accuracy
+    fn request(accuracy: Float) -> Coordinates? {
+        return builtin.location_request(accuracy)
+    }
+}
+
+// ============================================================================
+// GEOFENCING
+// ============================================================================
+
+/// Circular geofence region
+type CircularRegion {
+    center: H3Cell
+    radius: Distance
+    identifier: String
+}
+
+/// Check if a cell is inside a region
+fn inside(cell: H3Cell, region: CircularRegion) -> Bool {
+    let dist = cellDistance(cell, region.center)
+    return dist.meters <= region.radius.meters
+}
+
+/// Polygonal geofence (array of H3 cells)
+type PolygonRegion {
+    cells: Array<H3Cell>
+    identifier: String
+}
+
+/// Check if a cell is inside a polygon region
+fn inside(cell: H3Cell, region: PolygonRegion) -> Bool {
+    for regionCell in region.cells {
+        if cell.index == regionCell.index {
+            return true
+        }
+    }
+    return false
+}

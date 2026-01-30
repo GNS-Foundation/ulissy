@@ -1,0 +1,331 @@
+// ulissy/messaging.ul
+// Encrypted messaging primitives for secure communication
+//
+// Usage:
+//   import ulissy.messaging
+//   send to @alice { type: "greeting", message: "Hello!" }
+
+import ulissy.crypto
+import ulissy.temporal
+
+// ============================================================================
+// MESSAGE
+// ============================================================================
+
+/// A message with type and payload
+type Message {
+    id: String           // Unique message ID
+    type: String         // Message type (e.g., "text", "breadcrumb", "epoch")
+    payload: Bytes       // Serialized content
+    timestamp: Moment    // When created
+    
+    computed hash: Hash = sha256(self.payload)
+}
+
+/// Create a new message
+fn message(type: String, payload: Bytes) -> Message {
+    return Message {
+        id: uuid(),
+        type: type,
+        payload: payload,
+        timestamp: now
+    }
+}
+
+/// Create a text message
+fn textMessage(content: String) -> Message {
+    return message("text", content.toBytes())
+}
+
+// ============================================================================
+// ENVELOPE (Encrypted Container)
+// ============================================================================
+
+/// Encrypted message envelope with forward secrecy
+type Envelope {
+    id: String                // Envelope ID
+    sender: PublicKey         // Sender's identity
+    recipient: PublicKey      // Recipient's identity
+    ephemeral: PublicKey      // Ephemeral key for forward secrecy
+    nonce: Nonce              // Encryption nonce
+    ciphertext: Bytes         // Encrypted payload
+    signature: Signature      // Sender's signature over envelope
+    timestamp: Moment         // When sent
+    
+    /// Verify envelope signature
+    fn verify(self) -> Bool {
+        let signableData = self.toSignableBytes()
+        return self.signature.verify(signableData, self.sender)
+    }
+    
+    fn toSignableBytes(self) -> Bytes {
+        return builtin.envelope_signable_bytes(self)
+    }
+}
+
+/// Seal a message in an encrypted envelope
+fn seal(
+    message: Message,
+    from: Identity,
+    to: PublicKey
+) -> Envelope {
+    // Generate ephemeral key for forward secrecy
+    let (ephPrivate, ephPublic) = ephemeralKeyPair()
+    
+    // Derive shared secret via ECDH
+    let recipientX25519 = builtin.ed25519_to_x25519_public(to.bytes)
+    let sharedSecret = keyExchange(ephPrivate, recipientX25519)
+    
+    // Encrypt the message
+    let plaintext = builtin.serialize_message(message)
+    let encrypted = encrypt(plaintext, sharedSecret)
+    
+    // Create envelope
+    var envelope = Envelope {
+        id: uuid(),
+        sender: from.publicKey,
+        recipient: to,
+        ephemeral: builtin.x25519_to_public_key(ephPublic),
+        nonce: encrypted.nonce,
+        ciphertext: encrypted.data,
+        signature: Signature { bytes: [] },  // Placeholder
+        timestamp: now
+    }
+    
+    // Sign the envelope
+    let signableData = envelope.toSignableBytes()
+    envelope.signature = from.sign(signableData)
+    
+    return envelope
+}
+
+/// Open an encrypted envelope
+fn open(envelope: Envelope, recipient: Identity) -> Message? {
+    // Verify signature
+    if !envelope.verify() {
+        return nil
+    }
+    
+    // Derive shared secret
+    let ephemeralX25519 = builtin.ed25519_to_x25519_public(envelope.ephemeral.bytes)
+    let sharedSecret = keyExchange(recipient.privateKey, ephemeralX25519)
+    
+    // Decrypt
+    let ciphertext = Ciphertext {
+        data: envelope.ciphertext,
+        nonce: envelope.nonce,
+        tag: builtin.extract_tag(envelope.ciphertext)
+    }
+    
+    let plaintext = decrypt(ciphertext, sharedSecret)
+    if plaintext == nil {
+        return nil
+    }
+    
+    return builtin.deserialize_message(plaintext!)
+}
+
+// ============================================================================
+// VISIBILITY
+// ============================================================================
+
+/// Message visibility setting
+enum Visibility {
+    /// Only sender and recipient
+    private,
+    
+    /// Visible to followers
+    followers,
+    
+    /// Visible to extended network
+    network,
+    
+    /// Visible to everyone
+    public
+}
+
+// ============================================================================
+// CONVERSATION
+// ============================================================================
+
+/// A thread of messages between parties
+type Conversation {
+    id: String
+    participants: Array<PublicKey>
+    messages: Array<Message>
+    created: Moment
+    updated: Moment
+    
+    computed messageCount: Int = self.messages.length
+    computed lastMessage: Message? = self.messages.last
+}
+
+/// Create a new conversation
+fn conversation(with: Array<PublicKey>) -> Conversation {
+    return Conversation {
+        id: uuid(),
+        participants: with,
+        messages: [],
+        created: now,
+        updated: now
+    }
+}
+
+// ============================================================================
+// SEND STATEMENT SUPPORT
+// ============================================================================
+
+/// Target for send statement
+type SendTarget {
+    publicKey: PublicKey?,
+    handle: Handle?,
+    facetAddress: String?
+}
+
+/// Resolve a target to a public key
+fn resolveTarget(target: SendTarget) -> PublicKey? {
+    if target.publicKey != nil {
+        return target.publicKey
+    }
+    if target.handle != nil {
+        return builtin.resolve_handle(target.handle!)
+    }
+    if target.facetAddress != nil {
+        return builtin.resolve_facet(target.facetAddress!)
+    }
+    return nil
+}
+
+/// Send a message (used by `send to` statement)
+fn sendMessage(
+    from: Identity,
+    to: SendTarget,
+    content: Message
+) -> Result<Envelope, String> {
+    let recipientKey = resolveTarget(to)
+    if recipientKey == nil {
+        return Result.error("Could not resolve recipient")
+    }
+    
+    let envelope = seal(content, from, recipientKey!)
+    
+    // Deliver via relay
+    let delivered = builtin.deliver_envelope(envelope)
+    if !delivered {
+        return Result.error("Delivery failed")
+    }
+    
+    return Result.ok(envelope)
+}
+
+// ============================================================================
+// FACET ADDRESSING
+// ============================================================================
+
+/// Parse facet address (e.g., "dix@alice" or "home@bob/lights")
+type FacetAddress {
+    facet: String         // e.g., "dix", "home", "pay"
+    handle: Handle        // e.g., "alice", "bob"
+    path: String?         // e.g., "/lights" (optional)
+    
+    computed full: String = "\(self.facet)@\(self.handle.name)\(self.path ?? "")"
+}
+
+/// Parse facet address string
+fn parseFacetAddress(address: String) -> FacetAddress? {
+    return builtin.parse_facet_address(address)
+}
+
+// ============================================================================
+// PROTOCOL FACETS
+// ============================================================================
+
+/// DIX (Decentralized Information Exchange) facet
+type DixFacet {
+    identity: Identity
+    
+    /// Post to timeline
+    fn post(self, content: String, visibility: Visibility = .public) -> Result<String, String> {
+        return builtin.dix_post(self.identity, content, visibility)
+    }
+    
+    /// Reply to a post
+    fn reply(self, postId: String, content: String) -> Result<String, String> {
+        return builtin.dix_reply(self.identity, postId, content)
+    }
+    
+    /// Like a post
+    fn like(self, postId: String) -> Result<Bool, String> {
+        return builtin.dix_like(self.identity, postId)
+    }
+}
+
+/// Home automation facet
+type HomeFacet {
+    identity: Identity
+    path: String
+    
+    /// Send command to device
+    fn command(self, action: String, value: Any) -> Result<Bool, String> {
+        return builtin.home_command(self.identity, self.path, action, value)
+    }
+    
+    /// Set device value
+    fn set(self, property: String, value: Any) -> Result<Bool, String> {
+        return builtin.home_set(self.identity, self.path, property, value)
+    }
+    
+    /// Get device state
+    fn get(self, property: String) -> Any? {
+        return builtin.home_get(self.identity, self.path, property)
+    }
+}
+
+/// Payment facet
+type PayFacet {
+    identity: Identity
+    
+    /// Request payment
+    fn request(self, amount: Float, currency: String) -> Result<String, String> {
+        return builtin.pay_request(self.identity, amount, currency)
+    }
+    
+    /// Send payment
+    fn send(self, to: Handle, amount: Float, currency: String) -> Result<String, String> {
+        return builtin.pay_send(self.identity, to, amount, currency)
+    }
+}
+
+/// Email facet
+type EmailFacet {
+    identity: Identity
+    
+    /// Send email
+    fn send(self, to: String, subject: String, body: String) -> Result<Bool, String> {
+        return builtin.email_send(self.identity, to, subject, body)
+    }
+}
+
+// ============================================================================
+// FACET ACCESS HELPERS
+// ============================================================================
+
+/// Get DIX facet for identity
+fn dix(identity: Identity) -> DixFacet {
+    return DixFacet { identity: identity }
+}
+
+/// Get Home facet for identity
+fn home(identity: Identity, path: String = "") -> HomeFacet {
+    return HomeFacet { identity: identity, path: path }
+}
+
+/// Get Pay facet for identity
+fn pay(identity: Identity) -> PayFacet {
+    return PayFacet { identity: identity }
+}
+
+/// Get Email facet for identity
+fn email(identity: Identity) -> EmailFacet {
+    return EmailFacet { identity: identity }
+}

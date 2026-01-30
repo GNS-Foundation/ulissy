@@ -1,0 +1,138 @@
+// ulissy/core.ul
+// Core types and prelude for ULissy
+// This module is implicitly imported in all ULissy programs
+
+// ============================================================================
+// PRIMITIVE TYPES
+// ============================================================================
+
+/// Signed 64-bit integer
+type Int = builtin
+
+/// 64-bit floating point
+type Float = builtin
+
+/// Boolean value
+type Bool = builtin
+
+/// UTF-8 string
+type String = builtin
+
+/// Absence of value
+type Nil = builtin
+
+/// Unsigned 64-bit integer
+type Uint64 = builtin
+
+/// Unsigned 32-bit integer  
+type Uint32 = builtin
+
+/// Byte (unsigned 8-bit)
+type Byte = builtin
+
+/// Array of bytes
+type Bytes = Array<Byte>
+
+// ============================================================================
+// OPTIONAL TYPE
+// ============================================================================
+
+/// Optional value - either Some(T) or None
+enum Option<T> {
+    some(T),
+    none
+}
+
+/// Unwrap an optional with a default value
+fn unwrap<T>(opt: Option<T>, default: T) -> T {
+    match opt {
+        case some(value): return value
+        case none: return default
+    }
+}
+
+// ============================================================================
+// RESULT TYPE
+// ============================================================================
+
+/// Result of an operation that can fail
+enum Result<T, E> {
+    ok(T),
+    error(E)
+}
+
+/// Check if result is ok
+fn isOk<T, E>(result: Result<T, E>) -> Bool {
+    match result {
+        case ok(_): return true
+        case error(_): return false
+    }
+}
+
+/// Check if result is error
+fn isError<T, E>(result: Result<T, E>) -> Bool {
+    match result {
+        case ok(_): return false
+        case error(_): return true
+    }
+}
+
+// ============================================================================
+// COLLECTIONS
+// ============================================================================
+
+/// Dynamic array
+type Array<T> = builtin
+
+/// Key-value dictionary
+type Dict<K, V> = builtin
+
+/// Unique value set
+type Set<T> = builtin
+
+// ============================================================================
+// COMMON FUNCTIONS
+// ============================================================================
+
+/// Print to console (debug)
+fn print(message: String) -> Nil {
+    builtin.print(message)
+}
+
+/// Assert a condition (debug)
+fn assert(condition: Bool, message: String = "Assertion failed") -> Nil {
+    if !condition {
+        builtin.panic(message)
+    }
+}
+
+/// Panic with error message
+fn panic(message: String) -> Nil {
+    builtin.panic(message)
+}
+
+// ============================================================================
+// COMPARISON
+// ============================================================================
+
+/// Comparable trait
+trait Comparable {
+    fn compare(self, other: Self) -> Int
+}
+
+/// Minimum of two values
+fn min<T: Comparable>(a: T, b: T) -> T {
+    if a.compare(b) <= 0 { return a }
+    return b
+}
+
+/// Maximum of two values
+fn max<T: Comparable>(a: T, b: T) -> T {
+    if a.compare(b) >= 0 { return a }
+    return b
+}
+
+/// Clamp value to range
+fn clamp<T: Comparable>(value: T, lower: T, upper: T) -> T {
+    return max(lower, min(upper, value))
+}

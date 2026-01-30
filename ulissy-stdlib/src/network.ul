@@ -1,0 +1,286 @@
+// ulissy/network.ul
+// Network operations and data synchronization
+//
+// Usage:
+//   import ulissy.network
+//   network.publish(epoch)
+//   network.sync()
+
+import ulissy.trajectory
+import ulissy.messaging
+
+// ============================================================================
+// SYNC STATUS
+// ============================================================================
+
+/// Result of a sync operation
+type SyncStatus {
+    success: Bool
+    itemsSynced: Int
+    lastSync: Moment
+    error: String?
+}
+
+/// Create successful sync status
+fn syncSuccess(items: Int) -> SyncStatus {
+    return SyncStatus {
+        success: true,
+        itemsSynced: items,
+        lastSync: now,
+        error: nil
+    }
+}
+
+/// Create failed sync status
+fn syncFailed(error: String) -> SyncStatus {
+    return SyncStatus {
+        success: false,
+        itemsSynced: 0,
+        lastSync: now,
+        error: error
+    }
+}
+
+// ============================================================================
+// PUBLISH RESULT
+// ============================================================================
+
+/// Result of a publish operation
+type PublishResult {
+    success: Bool
+    itemId: String?
+    txHash: String?       // Blockchain transaction hash (if applicable)
+    error: String?
+}
+
+/// Create successful publish result
+fn publishSuccess(itemId: String) -> PublishResult {
+    return PublishResult {
+        success: true,
+        itemId: itemId,
+        txHash: nil,
+        error: nil
+    }
+}
+
+/// Create failed publish result
+fn publishFailed(error: String) -> PublishResult {
+    return PublishResult {
+        success: false,
+        itemId: nil,
+        txHash: nil,
+        error: error
+    }
+}
+
+// ============================================================================
+// NETWORK SERVICE
+// ============================================================================
+
+/// Network service for GNS operations
+type Network {
+    /// Check if network is available
+    fn available() -> Bool {
+        return builtin.network_available()
+    }
+    
+    /// Publish an epoch to the network
+    fn publish(epoch: Epoch) -> PublishResult {
+        if !Network.available() {
+            return publishFailed("No network connection")
+        }
+        return builtin.network_publish_epoch(epoch)
+    }
+    
+    /// Sync local data with network
+    fn sync() -> SyncStatus {
+        if !Network.available() {
+            return syncFailed("No network connection")
+        }
+        return builtin.network_sync()
+    }
+    
+    /// Sync trajectory specifically
+    fn syncTrajectory(trajectory: Trajectory) -> SyncStatus {
+        if !Network.available() {
+            return syncFailed("No network connection")
+        }
+        return builtin.network_sync_trajectory(trajectory)
+    }
+    
+    /// Fetch updates from network
+    fn fetch() -> SyncStatus {
+        if !Network.available() {
+            return syncFailed("No network connection")
+        }
+        return builtin.network_fetch()
+    }
+}
+
+/// Global network accessor
+const network: Network = Network {}
+
+// ============================================================================
+// GNS RECORD OPERATIONS
+// ============================================================================
+
+/// GNS Record (identity record on the network)
+type GnsRecord {
+    publicKey: PublicKey
+    handle: Handle?
+    facets: Array<String>
+    epochs: Array<String>      // Epoch IDs
+    updated: Moment
+    signature: Signature
+}
+
+/// Lookup a GNS record by handle
+fn lookupHandle(handle: Handle) -> GnsRecord? {
+    return builtin.gns_lookup_handle(handle)
+}
+
+/// Lookup a GNS record by public key
+fn lookupKey(key: PublicKey) -> GnsRecord? {
+    return builtin.gns_lookup_key(key)
+}
+
+/// Resolve handle to public key
+fn resolveHandle(handle: Handle) -> PublicKey? {
+    let record = lookupHandle(handle)
+    if record == nil { return nil }
+    return record!.publicKey
+}
+
+/// Resolve public key to handle
+fn resolveKey(key: PublicKey) -> Handle? {
+    let record = lookupKey(key)
+    if record == nil { return nil }
+    return record!.handle
+}
+
+// ============================================================================
+// RELAY CHANNEL
+// ============================================================================
+
+/// WebSocket relay channel for real-time messaging
+type RelayChannel {
+    url: String
+    isConnected: Bool
+    
+    /// Connect to relay
+    fn connect(self) -> Bool {
+        return builtin.relay_connect(self.url)
+    }
+    
+    /// Disconnect from relay
+    fn disconnect(self) {
+        builtin.relay_disconnect(self.url)
+    }
+    
+    /// Send envelope through relay
+    fn send(self, envelope: Envelope) -> Bool {
+        return builtin.relay_send(self.url, envelope)
+    }
+    
+    /// Subscribe to messages for identity
+    fn subscribe(self, identity: Identity, handler: (Envelope) -> Nil) {
+        builtin.relay_subscribe(self.url, identity, handler)
+    }
+}
+
+/// Create relay channel
+fn relay(url: String) -> RelayChannel {
+    return RelayChannel {
+        url: url,
+        isConnected: false
+    }
+}
+
+/// Default GNS relay
+const defaultRelay: RelayChannel = relay("wss://relay.gns.foundation/ws")
+
+// ============================================================================
+// HTTP HELPERS
+// ============================================================================
+
+/// HTTP request method
+enum HttpMethod {
+    get,
+    post,
+    put,
+    delete,
+    patch
+}
+
+/// HTTP response
+type HttpResponse {
+    status: Int
+    headers: Dict<String, String>
+    body: Bytes
+    
+    computed isOk: Bool = self.status >= 200 && self.status < 300
+    computed bodyString: String = String(self.body)
+}
+
+/// Make HTTP request
+async fn httpRequest(
+    url: String,
+    method: HttpMethod = .get,
+    headers: Dict<String, String> = {},
+    body: Bytes? = nil
+) -> HttpResponse? {
+    return builtin.http_request(url, method, headers, body)
+}
+
+/// GET request
+async fn httpGet(url: String) -> HttpResponse? {
+    return httpRequest(url, method: .get)
+}
+
+/// POST request
+async fn httpPost(url: String, body: Bytes) -> HttpResponse? {
+    return httpRequest(url, method: .post, body: body)
+}
+
+// ============================================================================
+// STELLAR OPERATIONS
+// ============================================================================
+
+/// Stellar transaction result
+type StellarTxResult {
+    success: Bool
+    hash: String?
+    ledger: Int?
+    error: String?
+}
+
+/// Submit data to Stellar
+fn stellarSubmit(data: Bytes, memo: String) -> StellarTxResult {
+    return builtin.stellar_submit(data, memo)
+}
+
+/// Record epoch hash on Stellar
+fn stellarRecordEpoch(epoch: Epoch) -> StellarTxResult {
+    let data = epoch.merkleRoot.bytes
+    let memo = "GNS:EPOCH:\(epoch.id.prefix(8))"
+    return stellarSubmit(data, memo)
+}
+
+// ============================================================================
+// BROADCAST
+// ============================================================================
+
+/// Broadcast a message to all followers
+fn broadcast(
+    identity: Identity,
+    content: String,
+    visibility: Visibility = .public
+) -> PublishResult {
+    return builtin.broadcast_message(identity, content, visibility)
+}
+
+/// Broadcast an epoch announcement
+fn broadcastEpoch(identity: Identity, epoch: Epoch) -> PublishResult {
+    let content = "Published epoch with \(epoch.count) breadcrumbs"
+    return broadcast(identity, content, visibility: .public)
+}
