@@ -60,6 +60,7 @@ pub enum TokenKind {
     SelfUpper,      // Self
     Computed,       // computed
     Invariant,      // invariant
+    Config,         // config
 
     // === LITERALS ===
     IntLiteral(i64),
@@ -122,8 +123,22 @@ pub enum TokenKind {
     Newline,
     EOF,
     
+    // === INTERPOLATION ===
+    /// Interpolated string: "Hello, \(name)!"
+    InterpolatedString(Vec<StringPart>),
+    
     // === ERROR ===
     Error(String),
+}
+
+/// Part of an interpolated string
+#[derive(Debug, Clone, PartialEq)]
+pub enum StringPart {
+    /// Literal text: "Hello, "
+    Literal(String),
+    
+    /// Interpolation placeholder: \(expression)
+    Interpolation(String),
 }
 
 impl fmt::Display for TokenKind {
@@ -549,6 +564,7 @@ impl<'a> Lexer<'a> {
             "Self" => TokenKind::SelfUpper,
             "computed" => TokenKind::Computed,
             "invariant" => TokenKind::Invariant,
+            "config" => TokenKind::Config,
             _ => TokenKind::Identifier(ident),
         };
 
@@ -621,54 +637,177 @@ impl<'a> Lexer<'a> {
     fn scan_string(&mut self) -> Result<TokenKind, LexerError> {
         let start_line = self.line;
         let start_column = self.column;
-        let mut value = String::new();
-
+        
+        let mut parts: Vec<StringPart> = Vec::new();
+        let mut current_literal = String::new();
+        let mut has_interpolation = false;
+        
         while let Some(c) = self.peek() {
-            if c == '"' {
-                self.advance(); // consume closing quote
-                return Ok(TokenKind::StringLiteral(value));
-            } else if c == '\\' {
-                self.advance(); // consume backslash
-                match self.advance() {
-                    Some('n') => value.push('\n'),
-                    Some('t') => value.push('\t'),
-                    Some('r') => value.push('\r'),
-                    Some('\\') => value.push('\\'),
-                    Some('"') => value.push('"'),
-                    Some('(') => {
-                        // String interpolation: \(expr)
-                        // For now, just capture as literal - parser will handle
-                        value.push_str("\\(");
+            match c {
+                '"' => {
+                    // End of string
+                    self.advance(); // consume closing quote
+                    
+                    // If we have a pending literal, add it
+                    if !current_literal.is_empty() {
+                        parts.push(StringPart::Literal(current_literal));
                     }
-                    Some(c) => {
-                        return Err(LexerError::new(
-                            &format!("Invalid escape sequence: \\{}", c),
-                            self.line,
-                            self.column,
-                        ));
-                    }
-                    None => {
-                        return Err(LexerError::new(
-                            "Unterminated string",
-                            start_line,
-                            start_column,
-                        ));
+                    
+                    // Return appropriate token type
+                    if has_interpolation {
+                        return Ok(TokenKind::InterpolatedString(parts));
+                    } else {
+                        // Plain string - extract the single literal
+                        let s = match parts.into_iter().next() {
+                            Some(StringPart::Literal(s)) => s,
+                            _ => String::new(),
+                        };
+                        return Ok(TokenKind::StringLiteral(s));
                     }
                 }
-            } else if c == '\n' {
-                return Err(LexerError::new(
-                    "Unterminated string (newline in string)",
-                    start_line,
-                    start_column,
-                ));
-            } else {
-                value.push(c);
-                self.advance();
+                
+                '\\' => {
+                    self.advance(); // consume backslash
+                    
+                    match self.peek() {
+                        Some('(') => {
+                            // String interpolation: \(expr)
+                            self.advance(); // consume '('
+                            has_interpolation = true;
+                            
+                            // Save current literal if any
+                            if !current_literal.is_empty() {
+                                parts.push(StringPart::Literal(current_literal.clone()));
+                                current_literal.clear();
+                            }
+                            
+                            // Scan until matching ')'
+                            let expr = self.scan_interpolation_expr()?;
+                            parts.push(StringPart::Interpolation(expr));
+                        }
+                        Some('n') => {
+                            self.advance();
+                            current_literal.push('\n');
+                        }
+                        Some('t') => {
+                            self.advance();
+                            current_literal.push('\t');
+                        }
+                        Some('r') => {
+                            self.advance();
+                            current_literal.push('\r');
+                        }
+                        Some('\\') => {
+                            self.advance();
+                            current_literal.push('\\');
+                        }
+                        Some('"') => {
+                            self.advance();
+                            current_literal.push('"');
+                        }
+                        Some(c) => {
+                            return Err(LexerError::new(
+                                &format!("Invalid escape sequence: \\{}", c),
+                                self.line,
+                                self.column,
+                            ));
+                        }
+                        None => {
+                            return Err(LexerError::new(
+                                "Unterminated string (EOF after backslash)",
+                                start_line,
+                                start_column,
+                            ));
+                        }
+                    }
+                }
+                
+                '\n' => {
+                    return Err(LexerError::new(
+                        "Unterminated string (newline in string)",
+                        start_line,
+                        start_column,
+                    ));
+                }
+                
+                _ => {
+                    current_literal.push(c);
+                    self.advance();
+                }
             }
         }
-
+        
         Err(LexerError::new(
             "Unterminated string",
+            start_line,
+            start_column,
+        ))
+    }
+    
+    /// Scan the expression inside \(...) interpolation
+    fn scan_interpolation_expr(&mut self) -> Result<String, LexerError> {
+        let start_line = self.line;
+        let start_column = self.column;
+        
+        let mut expr = String::new();
+        let mut paren_depth = 1; // We've already consumed the opening '('
+        
+        while let Some(c) = self.peek() {
+            match c {
+                '(' => {
+                    paren_depth += 1;
+                    expr.push(c);
+                    self.advance();
+                }
+                ')' => {
+                    paren_depth -= 1;
+                    if paren_depth == 0 {
+                        self.advance(); // consume closing ')'
+                        return Ok(expr);
+                    }
+                    expr.push(c);
+                    self.advance();
+                }
+                '"' => {
+                    // Nested string in interpolation
+                    self.advance();
+                    expr.push('"');
+                    
+                    // Scan until closing quote
+                    while let Some(inner_c) = self.peek() {
+                        if inner_c == '"' {
+                            expr.push('"');
+                            self.advance();
+                            break;
+                        } else if inner_c == '\\' {
+                            expr.push(inner_c);
+                            self.advance();
+                            if let Some(escaped) = self.peek() {
+                                expr.push(escaped);
+                                self.advance();
+                            }
+                        } else {
+                            expr.push(inner_c);
+                            self.advance();
+                        }
+                    }
+                }
+                '\n' => {
+                    return Err(LexerError::new(
+                        "Newline in interpolation expression",
+                        self.line,
+                        self.column,
+                    ));
+                }
+                _ => {
+                    expr.push(c);
+                    self.advance();
+                }
+            }
+        }
+        
+        Err(LexerError::new(
+            "Unterminated interpolation (missing ')')",
             start_line,
             start_column,
         ))

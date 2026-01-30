@@ -115,6 +115,38 @@ impl TypeContext {
         self.type_definitions.get(name).cloned()
     }
     
+    /// Register a user-defined type (enum, struct, etc.)
+    pub fn register_type(&mut self, name: &str, ty: Type) {
+        self.type_definitions.insert(name.to_string(), ty);
+    }
+    
+    /// Look up a user-defined type
+    pub fn lookup_type(&self, name: &str) -> Option<Type> {
+        self.type_definitions.get(name).cloned()
+    }
+    
+    /// Look up a member of a user-defined type
+    pub fn lookup_type_member(&self, type_name: &str, member: &str) -> Option<Type> {
+        // For enums, check if member is a variant
+        if let Some(Type::Enum { variants, .. }) = self.type_definitions.get(type_name) {
+            for variant in variants {
+                if variant.name == member {
+                    // Return a function type for the constructor
+                    let param_types = variant.associated_types.clone().unwrap_or_default();
+                    if param_types.is_empty() {
+                        return Some(Type::Named(type_name.to_string()));
+                    } else {
+                        return Some(Type::Function {
+                            params: param_types,
+                            ret: Box::new(Type::Named(type_name.to_string())),
+                        });
+                    }
+                }
+            }
+        }
+        None
+    }
+    
     /// Get the type of a member access (e.g., identity.trajectory)
     pub fn get_member_type(&self, base_type: &Type, member: &str) -> Option<Type> {
         match (base_type, member) {

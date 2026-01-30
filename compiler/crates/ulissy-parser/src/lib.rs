@@ -5,7 +5,7 @@
 pub mod ast;
 
 use ast::*;
-use ulissy_lexer::{Token, TokenKind};
+use ulissy_lexer::{Token, TokenKind, StringPart};
 use std::fmt;
 
 // ============================================================================
@@ -70,6 +70,7 @@ impl Parser {
             Some(TokenKind::Const) => self.parse_const_decl(),
             Some(TokenKind::Fn) => self.parse_fn_decl(),
             Some(TokenKind::Type) => self.parse_type_decl(),
+            Some(TokenKind::Enum) => self.parse_enum_decl(),
             Some(TokenKind::Every) => self.parse_every_block(),
             Some(TokenKind::When) => self.parse_when_block(),
             Some(TokenKind::After) => self.parse_after_block(),
@@ -78,6 +79,8 @@ impl Parser {
             Some(TokenKind::Match) => self.parse_match_statement(),
             Some(TokenKind::Return) => self.parse_return_statement(),
             Some(TokenKind::Import) => self.parse_import_statement(),
+            Some(TokenKind::Config) => self.parse_config_block(),
+            Some(TokenKind::Computed) => self.parse_computed_property_decl(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -322,6 +325,117 @@ impl Parser {
         }))
     }
 
+    /// enum Name { variant1, variant2, ... }
+    ///
+    /// Examples:
+    /// ```ulissy
+    /// enum LocationSource { gps, wifi, cell, ip, manual }
+    /// enum Option<T> { some(T), none }
+    /// enum Result<T, E> { ok(T), error(E) }
+    /// ```
+    fn parse_enum_decl(&mut self) -> Result<Statement, ParseError> {
+        let start = self.current_span();
+        self.expect(TokenKind::Enum)?;
+        
+        // Parse enum name
+        let name = self.expect_identifier()?;
+        
+        // Parse optional type parameters: <T, E>
+        let type_params = if self.check(TokenKind::Less) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+        
+        // Expect opening brace
+        self.expect(TokenKind::LeftBrace)?;
+        
+        // Parse variants
+        let mut variants = Vec::new();
+        
+        while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
+            let variant = self.parse_enum_variant()?;
+            variants.push(variant);
+            
+            // Comma is optional between variants (allows trailing comma)
+            if self.check(TokenKind::Comma) {
+                self.advance();
+            }
+        }
+        
+        // Expect closing brace
+        self.expect(TokenKind::RightBrace)?;
+        
+        // Validate: enum must have at least one variant
+        if variants.is_empty() {
+            return Err(self.error("Enum must have at least one variant"));
+        }
+        
+        Ok(Statement::EnumDecl(EnumDecl {
+            name,
+            type_params,
+            variants,
+            span: start,
+        }))
+    }
+
+    /// Parse a single enum variant: name or name(Type, Type)
+    fn parse_enum_variant(&mut self) -> Result<EnumVariant, ParseError> {
+        let name = self.expect_identifier()?;
+        
+        // Check for associated types: variant(Type, Type)
+        let associated_types = if self.check(TokenKind::LeftParen) {
+            self.advance();
+            
+            // Empty parens: none()
+            if self.check(TokenKind::RightParen) {
+                self.advance();
+                Some(Vec::new())
+            } else {
+                // Parse type list
+                let mut types = Vec::new();
+                loop {
+                    types.push(self.parse_type_expr()?);
+                    
+                    if !self.check(TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                }
+                
+                self.expect(TokenKind::RightParen)?;
+                Some(types)
+            }
+        } else {
+            None
+        };
+        
+        Ok(EnumVariant {
+            name,
+            associated_types,
+            named_fields: None, // Future: record-style variants
+        })
+    }
+
+    /// Parse type parameters: <T, E, ...>
+    fn parse_type_params(&mut self) -> Result<Vec<String>, ParseError> {
+        self.expect(TokenKind::Less)?;
+        
+        let mut params = Vec::new();
+        loop {
+            params.push(self.expect_identifier()?);
+            
+            if !self.check(TokenKind::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        
+        self.expect(TokenKind::Greater)?;
+        
+        Ok(params)
+    }
+
     /// every 10.minutes when condition { ... }
     fn parse_every_block(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
@@ -542,6 +656,97 @@ impl Parser {
         Ok(Statement::ImportStatement(ImportStatement { path, alias, span: start }))
     }
 
+    /// config { resolution: 7, interval: 10.minutes }
+    /// 
+    /// Config blocks define module-level constants that are:
+    /// - Evaluated at compile time when possible
+    /// - Accessible throughout the module as `config.fieldName`
+    fn parse_config_block(&mut self) -> Result<Statement, ParseError> {
+        let start = self.current_span();
+        self.expect(TokenKind::Config)?;
+        self.expect(TokenKind::LeftBrace)?;
+        
+        let mut fields = Vec::new();
+        
+        while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
+            let field_span = self.current_span();
+            let name = self.expect_identifier()?;
+            self.expect(TokenKind::Colon)?;
+            let value = self.parse_expression()?;
+            
+            fields.push(ConfigField {
+                name,
+                value,
+                span: field_span,
+            });
+            
+            // Optional comma between fields
+            if self.check(TokenKind::Comma) {
+                self.advance();
+            }
+        }
+        
+        self.expect(TokenKind::RightBrace)?;
+        
+        Ok(Statement::ConfigBlock(ConfigBlock {
+            fields,
+            span: start,
+        }))
+    }
+
+    /// computed status: CollectionStatus { isActive: running, count: total }
+    /// OR
+    /// computed total: Int = items.count
+    /// 
+    /// Standalone computed properties are reactive values that:
+    /// - Automatically update when dependencies change
+    /// - Can be accessed like regular properties
+    fn parse_computed_property_decl(&mut self) -> Result<Statement, ParseError> {
+        let start = self.current_span();
+        self.expect(TokenKind::Computed)?;
+        
+        let name = self.expect_identifier()?;
+        self.expect(TokenKind::Colon)?;
+        let type_annotation = self.parse_type_expr()?;
+        
+        // Two forms:
+        // 1. computed x: Int = expr
+        // 2. computed x: Type { field: expr, ... }
+        
+        let body = if self.check(TokenKind::Equal) {
+            // Form 1: Single expression
+            self.advance();
+            let expr = self.parse_expression()?;
+            ComputedBody::Expression(expr)
+        } else if self.check(TokenKind::LeftBrace) {
+            // Form 2: Object literal body
+            self.advance();
+            
+            let mut fields = Vec::new();
+            
+            while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
+                let field = self.parse_object_field()?;
+                fields.push(field);
+                
+                if self.check(TokenKind::Comma) {
+                    self.advance();
+                }
+            }
+            
+            self.expect(TokenKind::RightBrace)?;
+            ComputedBody::ObjectFields(fields)
+        } else {
+            return Err(self.error("Expected '=' or '{' after computed property type"));
+        };
+        
+        Ok(Statement::ComputedPropertyDecl(ComputedPropertyDecl {
+            name,
+            type_annotation,
+            body,
+            span: start,
+        }))
+    }
+
     fn parse_expression_statement(&mut self) -> Result<Statement, ParseError> {
         let expr = self.parse_expression()?;
         Ok(Statement::ExpressionStatement(expr))
@@ -552,7 +757,34 @@ impl Parser {
     // ========================================================================
 
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        self.parse_or_expr()
+        // Nil coalescing has lowest precedence (evaluated last)
+        self.parse_nil_coalescing_expr()
+    }
+
+    /// Parse nil coalescing expression: expr ?? default
+    /// 
+    /// Precedence: Lower than || (or), so `a || b ?? c` means `(a || b) ?? c`
+    /// 
+    /// Example: `me.trajectory.last?.hash ?? "genesis"`
+    fn parse_nil_coalescing_expr(&mut self) -> Result<Expression, ParseError> {
+        let mut left = self.parse_or_expr()?;
+        
+        while self.check(TokenKind::DoubleQuestion) {
+            let span = self.current_span();
+            self.advance(); // consume ??
+            
+            // Right side: parse at same precedence for right-associativity
+            // a ?? b ?? c  =>  a ?? (b ?? c)
+            let right = self.parse_nil_coalescing_expr()?;
+            
+            left = Expression::NilCoalescing(Box::new(NilCoalescingExpr {
+                primary: left,
+                fallback: right,
+                span,
+            }));
+        }
+        
+        Ok(left)
     }
 
     fn parse_or_expr(&mut self) -> Result<Expression, ParseError> {
@@ -711,6 +943,7 @@ impl Parser {
         let mut expr = self.parse_primary_expr()?;
         
         loop {
+            // Regular member access (.)
             if self.check(TokenKind::Dot) {
                 let span = self.current_span();
                 self.advance();
@@ -743,7 +976,35 @@ impl Parser {
                         }));
                     }
                 }
-            } else if self.check(TokenKind::LeftParen) {
+            }
+            // Optional chaining (?.)
+            else if self.check(TokenKind::QuestionDot) {
+                let span = self.current_span();
+                self.advance(); // consume ?.
+                let member = self.expect_identifier()?;
+                
+                // Check for optional method call: obj?.method(args)
+                if self.check(TokenKind::LeftParen) {
+                    self.advance();
+                    let arguments = self.parse_arguments()?;
+                    self.expect(TokenKind::RightParen)?;
+                    expr = Expression::OptionalMethodCall(Box::new(OptionalMethodCallExpr {
+                        object: expr,
+                        method: member,
+                        arguments,
+                        span,
+                    }));
+                } else {
+                    // Optional member access: obj?.member
+                    expr = Expression::OptionalMember(Box::new(OptionalMemberExpr {
+                        object: expr,
+                        member,
+                        span,
+                    }));
+                }
+            }
+            // Function call
+            else if self.check(TokenKind::LeftParen) {
                 let span = self.current_span();
                 self.advance();
                 let arguments = self.parse_arguments()?;
@@ -753,7 +1014,9 @@ impl Parser {
                     arguments,
                     span,
                 }));
-            } else if self.check(TokenKind::LeftBracket) {
+            }
+            // Index access
+            else if self.check(TokenKind::LeftBracket) {
                 let span = self.current_span();
                 self.advance();
                 let index = self.parse_expression()?;
@@ -763,7 +1026,8 @@ impl Parser {
                     index,
                     span,
                 }));
-            } else {
+            }
+            else {
                 break;
             }
         }
@@ -816,6 +1080,9 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Literal(Literal::String(s)))
             }
+            Some(TokenKind::InterpolatedString(parts)) => {
+                self.parse_interpolated_string(parts)
+            }
             Some(TokenKind::True) => {
                 self.advance();
                 Ok(Expression::Literal(Literal::Bool(true)))
@@ -861,6 +1128,10 @@ impl Parser {
                 self.expect(TokenKind::RightBracket)?;
                 Ok(Expression::Array(elements))
             }
+            // Object literal: { x: 10, y: 20 }
+            Some(TokenKind::LeftBrace) => {
+                self.parse_object_literal()
+            }
             // Handle .enumVariant syntax (Swift-style shorthand)
             Some(TokenKind::Dot) => {
                 self.advance();
@@ -869,6 +1140,118 @@ impl Parser {
             }
             _ => Err(self.error("Expected expression")),
         }
+    }
+    
+    /// Parse object literal: { field1: value1, field2: value2, ... }
+    fn parse_object_literal(&mut self) -> Result<Expression, ParseError> {
+        let start = self.current_span();
+        self.expect(TokenKind::LeftBrace)?;
+        
+        let mut fields = Vec::new();
+        
+        // Empty object: {}
+        if self.check(TokenKind::RightBrace) {
+            self.advance();
+            return Ok(Expression::ObjectLiteral(Box::new(ObjectLiteralExpr {
+                fields,
+                type_hint: None,
+                span: start,
+            })));
+        }
+        
+        // Parse fields
+        loop {
+            let field = self.parse_object_field()?;
+            fields.push(field);
+            
+            // Check for comma or end
+            if self.check(TokenKind::Comma) {
+                self.advance();
+                // Allow trailing comma: { x: 1, y: 2, }
+                if self.check(TokenKind::RightBrace) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        
+        self.expect(TokenKind::RightBrace)?;
+        
+        // Optional type hint: { x: 10 } as Point
+        let type_hint = if self.check(TokenKind::As) {
+            self.advance();
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
+        
+        Ok(Expression::ObjectLiteral(Box::new(ObjectLiteralExpr {
+            fields,
+            type_hint,
+            span: start,
+        })))
+    }
+    
+    /// Parse a single object field: name: value OR name (shorthand)
+    fn parse_object_field(&mut self) -> Result<ObjectField, ParseError> {
+        let span = self.current_span();
+        let name = self.expect_identifier()?;
+        
+        // Check for value: name: expression
+        let value = if self.check(TokenKind::Colon) {
+            self.advance();
+            Some(self.parse_expression()?)
+        } else {
+            // Shorthand: { x } means { x: x }
+            None
+        };
+        
+        Ok(ObjectField { name, value, span })
+    }
+    
+    /// Parse an interpolated string from lexer output
+    fn parse_interpolated_string(
+        &mut self,
+        lexer_parts: Vec<StringPart>,
+    ) -> Result<Expression, ParseError> {
+        let span = self.current_span();
+        self.advance(); // consume the InterpolatedString token
+        
+        let mut parsed_parts = Vec::new();
+        
+        for part in lexer_parts {
+            match part {
+                StringPart::Literal(s) => {
+                    parsed_parts.push(InterpolatedPart::Literal(s));
+                }
+                StringPart::Interpolation(expr_str) => {
+                    // Parse the expression string using a sub-lexer/parser
+                    let expr = self.parse_embedded_expression(&expr_str)?;
+                    parsed_parts.push(InterpolatedPart::Expression(expr));
+                }
+            }
+        }
+        
+        Ok(Expression::InterpolatedString(Box::new(InterpolatedStringExpr {
+            parts: parsed_parts,
+            span,
+        })))
+    }
+    
+    /// Parse an expression from a string (used for interpolation)
+    fn parse_embedded_expression(&mut self, source: &str) -> Result<Expression, ParseError> {
+        // Tokenize the embedded expression
+        let tokens = ulissy_lexer::tokenize(source)
+            .map_err(|e| ParseError::new(
+                &format!("Error in interpolation: {}", e.message),
+                e.line,
+                e.column,
+            ))?;
+        
+        // Create a sub-parser for the expression
+        let mut sub_parser = Parser::new(tokens);
+        sub_parser.parse_expression()
     }
     
     /// Accept identifier OR keyword as identifier (for .public, .private, etc.)

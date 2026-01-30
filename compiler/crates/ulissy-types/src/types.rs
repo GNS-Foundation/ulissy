@@ -67,6 +67,29 @@ pub enum Type {
     
     // === USER-DEFINED ===
     Named(String),
+    
+    /// An enum type with its variants
+    Enum {
+        name: String,
+        variants: Vec<EnumVariantType>,
+    },
+    
+    /// Anonymous object/record type: { x: Int, y: Int }
+    Object {
+        fields: Vec<(String, Type)>,
+    },
+}
+
+/// Represents a typed enum variant
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariantType {
+    /// Variant name (e.g., "gps", "ok")
+    pub name: String,
+    
+    /// Associated types, if any
+    /// None for simple variants
+    /// Some([Type::Int]) for single-value variants
+    pub associated_types: Option<Vec<Type>>,
 }
 
 impl Type {
@@ -203,6 +226,15 @@ impl fmt::Display for Type {
             Type::Unknown => write!(f, "?"),
             Type::Error => write!(f, "<error>"),
             Type::Named(name) => write!(f, "{}", name),
+            Type::Enum { name, .. } => write!(f, "enum {}", name),
+            Type::Object { fields } => {
+                write!(f, "{{ ")?;
+                for (i, (name, ty)) in fields.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}: {}", name, ty)?;
+                }
+                write!(f, " }}")
+            }
         }
     }
 }
@@ -255,16 +287,55 @@ pub enum TypedStatementKind {
         fields: Vec<(String, TypedExpr)>,
     },
     ExpressionStatement(TypedExpr),
+    
+    EnumDecl {
+        name: String,
+        type_params: Vec<String>,
+        variants: Vec<TypedEnumVariant>,
+    },
+    
+    ConfigBlock {
+        fields: Vec<TypedConfigField>,
+    },
+    
+    ComputedPropertyDecl {
+        name: String,
+        inferred_type: Type,
+        body: TypedComputedBody,
+    },
 }
 
-#[derive(Debug)]
+/// A typed enum variant
+#[derive(Debug, Clone)]
+pub struct TypedEnumVariant {
+    pub name: String,
+    pub associated_types: Option<Vec<Type>>,
+}
+
+/// A typed config field
+#[derive(Debug, Clone)]
+pub struct TypedConfigField {
+    pub name: String,
+    pub value: TypedExpr,
+}
+
+/// Body of a typed computed property
+#[derive(Debug, Clone)]
+pub enum TypedComputedBody {
+    /// Single expression: computed x: Int = a + b
+    Expression(TypedExpr),
+    /// Object literal body: computed status: Status { field1: expr1, field2: expr2 }
+    ObjectFields(Vec<TypedObjectField>),
+}
+
+#[derive(Debug, Clone)]
 pub struct TypedExpr {
     pub kind: TypedExprKind,
     pub ty: Type,
     pub span: ast::Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypedExprKind {
     Literal(ast::Literal),
     Identifier(String),
@@ -297,6 +368,59 @@ pub enum TypedExprKind {
         unit: String,
     },
     Array(Vec<TypedExpr>),
+    
+    /// Optional member access: obj?.member
+    OptionalMember {
+        object: Box<TypedExpr>,
+        member: String,
+    },
+    
+    /// Optional method call: obj?.method(args)
+    OptionalMethodCall {
+        object: Box<TypedExpr>,
+        method: String,
+        args: Vec<TypedExpr>,
+    },
+    
+    /// Nil coalescing: expr ?? default
+    NilCoalescing {
+        primary: Box<TypedExpr>,
+        fallback: Box<TypedExpr>,
+    },
+    
+    /// Object literal: { x: 10, y: 20 }
+    ObjectLiteral {
+        fields: Vec<TypedObjectField>,
+        type_hint: Option<String>,
+    },
+    
+    /// Interpolated string: "Hello, \(name)!"
+    InterpolatedString {
+        parts: Vec<TypedInterpolatedPart>,
+    },
+}
+
+/// A typed object field
+#[derive(Debug, Clone)]
+pub struct TypedObjectField {
+    /// Field name
+    pub name: String,
+    
+    /// Typed field value
+    pub value: TypedExpr,
+    
+    /// Inferred type of the field
+    pub field_type: Type,
+}
+
+/// A part of a typed interpolated string
+#[derive(Debug, Clone)]
+pub enum TypedInterpolatedPart {
+    /// Literal text
+    Literal(String),
+    
+    /// Typed expression to interpolate
+    Expression(TypedExpr),
 }
 
 // ============================================================================

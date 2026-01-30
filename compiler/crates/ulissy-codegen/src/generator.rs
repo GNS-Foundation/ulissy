@@ -3,7 +3,7 @@
 // Version 0.1.0
 
 use crate::{CodeGenError, GeneratedCode, RustEmitter};
-use ulissy_types::{TypedProgram, TypedStatement, TypedStatementKind, TypedExpr, TypedExprKind, Type};
+use ulissy_types::{TypedProgram, TypedStatement, TypedStatementKind, TypedExpr, TypedExprKind, Type, TypedEnumVariant, TypedObjectField, TypedInterpolatedPart, TypedConfigField, TypedComputedBody};
 use ulissy_parser::ast::{Literal, BinaryOp, UnaryOp};
 
 // ============================================================================
@@ -101,6 +101,15 @@ hkdf = "0.12"
             }
             TypedStatementKind::SendStatement { recipient, fields } => {
                 self.generate_send_statement(recipient, fields)
+            }
+            TypedStatementKind::EnumDecl { name, type_params, variants } => {
+                self.generate_enum_decl(name, type_params, variants)
+            }
+            TypedStatementKind::ConfigBlock { fields } => {
+                self.generate_config_block(fields)
+            }
+            TypedStatementKind::ComputedPropertyDecl { name, inferred_type, body } => {
+                self.generate_computed_property(name, inferred_type, body)
             }
             TypedStatementKind::ExpressionStatement(expr) => {
                 let code = self.generate_expression(expr)?;
@@ -245,6 +254,201 @@ hkdf = "0.12"
         Ok(())
     }
     
+    /// Generate Rust enum declaration
+    fn generate_enum_decl(
+        &mut self,
+        name: &str,
+        type_params: &[String],
+        variants: &[TypedEnumVariant],
+    ) -> Result<(), CodeGenError> {
+        // Emit derives
+        self.emitter.emit_line("#[derive(Debug, Clone, PartialEq)]");
+        
+        // Emit enum declaration with optional type parameters
+        if type_params.is_empty() {
+            self.emitter.emit_line(&format!("pub enum {} {{", name));
+        } else {
+            let params = type_params.join(", ");
+            self.emitter.emit_line(&format!("pub enum {}<{}> {{", name, params));
+        }
+        
+        self.emitter.indent();
+        
+        // Emit each variant
+        for variant in variants {
+            let variant_name = capitalize(&variant.name);
+            
+            if let Some(associated) = &variant.associated_types {
+                if associated.is_empty() {
+                    // Empty tuple variant
+                    self.emitter.emit_line(&format!("{},", variant_name));
+                } else {
+                    // Tuple variant: Some(T) or Error(String, i32)
+                    let types: Vec<String> = associated.iter()
+                        .map(|t| self.type_to_rust(t))
+                        .collect();
+                    self.emitter.emit_line(&format!("{}({}),", variant_name, types.join(", ")));
+                }
+            } else {
+                // Simple variant: Gps
+                self.emitter.emit_line(&format!("{},", variant_name));
+            }
+        }
+        
+        self.emitter.dedent();
+        self.emitter.emit_line("}");
+        self.emitter.newline();
+        
+        // Generate Default impl if there's a "default" or "none" variant
+        self.generate_enum_default_impl(name, type_params, variants)?;
+        
+        Ok(())
+    }
+    
+    /// Generate Default impl for enums with "default" or "none" variant
+    fn generate_enum_default_impl(
+        &mut self,
+        name: &str,
+        type_params: &[String],
+        variants: &[TypedEnumVariant],
+    ) -> Result<(), CodeGenError> {
+        // Find default variant
+        let default_variant = variants.iter().find(|v| {
+            (v.name == "default" || v.name == "none") && v.associated_types.is_none()
+        });
+        
+        if let Some(variant) = default_variant {
+            let variant_name = capitalize(&variant.name);
+            
+            if type_params.is_empty() {
+                self.emitter.emit_line(&format!("impl Default for {} {{", name));
+            } else {
+                let params = type_params.join(", ");
+                self.emitter.emit_line(&format!(
+                    "impl<{}> Default for {}<{}> {{",
+                    params, name, params
+                ));
+            }
+            
+            self.emitter.indent();
+            self.emitter.emit_line("fn default() -> Self {");
+            self.emitter.indent();
+            self.emitter.emit_line(&format!("Self::{}", variant_name));
+            self.emitter.dedent();
+            self.emitter.emit_line("}");
+            self.emitter.dedent();
+            self.emitter.emit_line("}");
+            self.emitter.newline();
+        }
+        
+        Ok(())
+    }
+    
+    /// Generate a config block as a Rust module with constants
+    /// 
+    /// ```ulissy
+    /// config {
+    ///     resolution: 7,
+    ///     interval: 10.minutes,
+    /// }
+    /// ```
+    /// 
+    /// Generates:
+    /// ```rust
+    /// mod config {
+    ///     pub const RESOLUTION: i64 = 7;
+    ///     pub const INTERVAL: Duration = Duration::from_mins(10);
+    /// }
+    /// ```
+    fn generate_config_block(&mut self, fields: &[TypedConfigField]) -> Result<(), CodeGenError> {
+        self.emitter.emit_comment("ULissy: config block - module configuration");
+        self.emitter.emit_line("mod config {");
+        self.emitter.indent();
+        
+        for field in fields {
+            let value_code = self.generate_expression(&field.value)?;
+            let const_name = to_screaming_snake_case(&field.name);
+            let type_annotation = self.type_to_rust(&field.value.ty);
+            
+            if type_annotation != "auto" {
+                self.emitter.emit_line(&format!(
+                    "pub const {}: {} = {};",
+                    const_name, type_annotation, value_code
+                ));
+            } else {
+                self.emitter.emit_line(&format!(
+                    "pub const {} = {};",
+                    const_name, value_code
+                ));
+            }
+        }
+        
+        self.emitter.dedent();
+        self.emitter.emit_line("}");
+        self.emitter.newline();
+        
+        Ok(())
+    }
+    
+    /// Generate a computed property as a Rust function
+    /// 
+    /// ```ulissy
+    /// computed status: Status {
+    ///     isActive: collection.running,
+    ///     count: total
+    /// }
+    /// ```
+    /// 
+    /// Generates:
+    /// ```rust
+    /// fn status() -> Status {
+    ///     Status {
+    ///         is_active: collection.running(),
+    ///         count: total,
+    ///     }
+    /// }
+    /// ```
+    fn generate_computed_property(
+        &mut self, 
+        name: &str, 
+        inferred_type: &Type,
+        body: &TypedComputedBody,
+    ) -> Result<(), CodeGenError> {
+        let rust_name = to_snake_case(name);
+        let type_annotation = self.type_to_rust(inferred_type);
+        
+        self.emitter.emit_comment("ULissy: computed property - reactive value");
+        self.emitter.emit_line(&format!("fn {}() -> {} {{", rust_name, type_annotation));
+        self.emitter.indent();
+        
+        match body {
+            TypedComputedBody::Expression(expr) => {
+                let expr_code = self.generate_expression(expr)?;
+                self.emitter.emit_line(&expr_code);
+            }
+            TypedComputedBody::ObjectFields(fields) => {
+                // Generate struct instantiation
+                self.emitter.emit_line(&format!("{} {{", type_annotation));
+                self.emitter.indent();
+                
+                for field in fields {
+                    let value_code = self.generate_expression(&field.value)?;
+                    let rust_field_name = to_snake_case(&field.name);
+                    self.emitter.emit_line(&format!("{}: {},", rust_field_name, value_code));
+                }
+                
+                self.emitter.dedent();
+                self.emitter.emit_line("}");
+            }
+        }
+        
+        self.emitter.dedent();
+        self.emitter.emit_line("}");
+        self.emitter.newline();
+        
+        Ok(())
+    }
+    
     // ========================================================================
     // EXPRESSION GENERATION
     // ========================================================================
@@ -342,6 +546,157 @@ hkdf = "0.12"
                     .collect();
                 Ok(format!("vec![{}]", elems?.join(", ")))
             }
+            
+            // Optional member access: obj?.member
+            // Generated as: obj.as_ref().map(|x| x.member())
+            TypedExprKind::OptionalMember { object, member } => {
+                let obj = self.generate_expression(object)?;
+                let member_rust = self.map_member(member);
+                
+                Ok(format!(
+                    "{}.as_ref().map(|__opt| __opt.{}())",
+                    obj, member_rust
+                ))
+            }
+            
+            // Optional method call: obj?.method(args)
+            // Generated as: obj.as_ref().map(|x| x.method(args))
+            TypedExprKind::OptionalMethodCall { object, method, args } => {
+                let obj = self.generate_expression(object)?;
+                let method_rust = self.map_method(method);
+                
+                let args_code: Result<Vec<_>, _> = args.iter()
+                    .map(|a| self.generate_expression(a))
+                    .collect();
+                let args_str = args_code?.join(", ");
+                
+                if args_str.is_empty() {
+                    Ok(format!(
+                        "{}.as_ref().map(|__opt| __opt.{}())",
+                        obj, method_rust
+                    ))
+                } else {
+                    Ok(format!(
+                        "{}.as_ref().map(|__opt| __opt.{}({}))",
+                        obj, method_rust, args_str
+                    ))
+                }
+            }
+            
+            // Nil coalescing: expr ?? default
+            // Generated as: expr.unwrap_or(default) or expr.unwrap_or_else(|| default)
+            TypedExprKind::NilCoalescing { primary, fallback } => {
+                let primary_code = self.generate_expression(primary)?;
+                let fallback_code = self.generate_expression(fallback)?;
+                
+                // Use unwrap_or for simple values (literals/identifiers)
+                // Use unwrap_or_else for complex expressions (lazy evaluation)
+                let is_simple_fallback = matches!(
+                    &fallback.kind,
+                    TypedExprKind::Literal(_) | TypedExprKind::Identifier(_)
+                );
+                
+                if is_simple_fallback {
+                    Ok(format!(
+                        "{}.unwrap_or({})",
+                        primary_code, fallback_code
+                    ))
+                } else {
+                    Ok(format!(
+                        "{}.unwrap_or_else(|| {})",
+                        primary_code, fallback_code
+                    ))
+                }
+            }
+            
+            // Object literal: { x: 10, y: 20 }
+            TypedExprKind::ObjectLiteral { fields, type_hint } => {
+                self.generate_object_literal(fields, type_hint)
+            }
+            
+            // Interpolated string: "Hello, \(name)!"
+            TypedExprKind::InterpolatedString { parts } => {
+                self.generate_interpolated_string(parts)
+            }
+        }
+    }
+    
+    /// Generate Rust code for object literal
+    fn generate_object_literal(
+        &self,
+        fields: &[TypedObjectField],
+        type_hint: &Option<String>,
+    ) -> Result<String, CodeGenError> {
+        if let Some(type_name) = type_hint {
+            // Generate named struct instantiation: Point { x: 10, y: 20 }
+            let mut field_inits = Vec::new();
+            
+            for field in fields {
+                let value_code = self.generate_expression(&field.value)?;
+                // Convert camelCase to snake_case for Rust
+                let rust_field_name = to_snake_case(&field.name);
+                field_inits.push(format!("{}: {}", rust_field_name, value_code));
+            }
+            
+            Ok(format!("{} {{ {} }}", type_name, field_inits.join(", ")))
+        } else {
+            // Generate anonymous object as HashMap
+            let mut inserts = Vec::new();
+            
+            for field in fields {
+                let value_code = self.generate_expression(&field.value)?;
+                inserts.push(format!(
+                    "(\"{}\".to_string(), Box::new({}) as Box<dyn std::any::Any>)",
+                    field.name, value_code
+                ));
+            }
+            
+            Ok(format!(
+                "std::collections::HashMap::from([{}])",
+                inserts.join(", ")
+            ))
+        }
+    }
+    
+    /// Generate Rust code for interpolated string
+    /// ULissy: "Hello, \(name)!" → Rust: format!("Hello, {}!", name)
+    fn generate_interpolated_string(
+        &self,
+        parts: &[TypedInterpolatedPart],
+    ) -> Result<String, CodeGenError> {
+        let mut format_string = String::new();
+        let mut args = Vec::new();
+        
+        for part in parts {
+            match part {
+                TypedInterpolatedPart::Literal(s) => {
+                    // Escape braces for format!()
+                    let escaped = s
+                        .replace('{', "{{")
+                        .replace('}', "}}");
+                    format_string.push_str(&escaped);
+                }
+                TypedInterpolatedPart::Expression(expr) => {
+                    // Add placeholder to format string
+                    format_string.push_str("{}");
+                    
+                    // Generate expression and add to args
+                    let expr_code = self.generate_expression(expr)?;
+                    args.push(expr_code);
+                }
+            }
+        }
+        
+        // Generate the format!() call
+        if args.is_empty() {
+            // No interpolations, just a plain string
+            Ok(format!("\"{}\".to_string()", format_string))
+        } else {
+            Ok(format!(
+                "format!(\"{}\", {})",
+                format_string,
+                args.join(", ")
+            ))
         }
     }
     
@@ -470,4 +825,36 @@ fn capitalize(s: &str) -> String {
         None => String::new(),
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
     }
+}
+
+/// Convert camelCase to snake_case
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_lowercase().next().unwrap());
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Convert camelCase to SCREAMING_SNAKE_CASE
+fn to_screaming_snake_case(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c);
+        } else {
+            result.push(c.to_uppercase().next().unwrap());
+        }
+    }
+    result
 }

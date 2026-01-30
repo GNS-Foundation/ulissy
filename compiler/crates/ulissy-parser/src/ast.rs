@@ -38,6 +38,9 @@ pub enum Statement {
     /// type Name { fields }
     TypeDecl(TypeDecl),
     
+    /// enum Name { variant1, variant2, ... }
+    EnumDecl(EnumDecl),
+    
     /// every 10.minutes { ... }
     EveryBlock(EveryBlock),
     
@@ -64,6 +67,12 @@ pub enum Statement {
     
     /// import module.path
     ImportStatement(ImportStatement),
+    
+    /// config { field: value, ... }
+    ConfigBlock(ConfigBlock),
+    
+    /// computed name: Type = expr  OR  computed name: Type { fields }
+    ComputedPropertyDecl(ComputedPropertyDecl),
 }
 
 // ============================================================================
@@ -139,6 +148,72 @@ pub struct FieldDecl {
     pub type_expr: TypeExpr,
     pub is_computed: bool,
     pub default_value: Option<Expression>,
+}
+
+/// Enum declaration: enum Name { variant1, variant2, ... }
+///
+/// Example:
+/// ```ulissy
+/// enum LocationSource {
+///     gps,
+///     wifi,
+///     cell,
+///     ip,
+///     manual
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct EnumDecl {
+    /// The enum name (e.g., "LocationSource")
+    pub name: String,
+    
+    /// Generic type parameters (e.g., ["T", "E"] for Result<T, E>)
+    pub type_params: Vec<String>,
+    
+    /// The enum variants
+    pub variants: Vec<EnumVariant>,
+    
+    /// Source location
+    pub span: Span,
+}
+
+/// A single enum variant
+///
+/// Simple: `gps`
+/// With value: `ok(T)` or `point(x: Int, y: Int)`
+#[derive(Debug, Clone)]
+pub struct EnumVariant {
+    /// Variant name (e.g., "gps", "ok")
+    pub name: String,
+    
+    /// Associated types, if any
+    /// None = simple variant like `gps`
+    /// Some([]) = empty tuple like `none()`
+    /// Some([Type]) = single value like `ok(T)`
+    pub associated_types: Option<Vec<TypeExpr>>,
+    
+    /// Named fields for record-style variants (future)
+    /// e.g., `point(x: Int, y: Int)`
+    pub named_fields: Option<Vec<(String, TypeExpr)>>,
+}
+
+impl fmt::Display for EnumDecl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "enum {} {{ ", self.name)?;
+        for (i, variant) in self.variants.iter().enumerate() {
+            if i > 0 { write!(f, ", ")?; }
+            write!(f, "{}", variant.name)?;
+            if let Some(types) = &variant.associated_types {
+                write!(f, "(")?;
+                for (j, ty) in types.iter().enumerate() {
+                    if j > 0 { write!(f, ", ")?; }
+                    write!(f, "{:?}", ty)?;
+                }
+                write!(f, ")")?;
+            }
+        }
+        write!(f, " }}")
+    }
 }
 
 // ============================================================================
@@ -241,6 +316,66 @@ pub struct ImportStatement {
 }
 
 // ============================================================================
+// CONFIG BLOCK (Module-level configuration)
+// ============================================================================
+
+/// Configuration block - module-level settings
+/// 
+/// Example:
+/// ```ulissy
+/// config {
+///     resolution: 7,
+///     interval: 10.minutes,
+///     minBreadcrumbsPerEpoch: 100
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ConfigBlock {
+    pub fields: Vec<ConfigField>,
+    pub span: Span,
+}
+
+/// A single field in a config block
+#[derive(Debug, Clone)]
+pub struct ConfigField {
+    pub name: String,
+    pub value: Expression,
+    pub span: Span,
+}
+
+// ============================================================================
+// COMPUTED PROPERTY DECLARATION (Standalone reactive values)
+// ============================================================================
+
+/// Standalone computed property - module-level reactive value
+/// 
+/// Example:
+/// ```ulissy
+/// computed status: CollectionStatus {
+///     isActive: collection.running,
+///     totalCount: me.trajectory.count
+/// }
+/// 
+/// computed total: Int = items.count
+/// ```
+#[derive(Debug, Clone)]
+pub struct ComputedPropertyDecl {
+    pub name: String,
+    pub type_annotation: TypeExpr,
+    pub body: ComputedBody,
+    pub span: Span,
+}
+
+/// Body of a computed property declaration
+#[derive(Debug, Clone)]
+pub enum ComputedBody {
+    /// Single expression: computed x: Int = a + b
+    Expression(Expression),
+    /// Object literal body: computed status: Status { field1: expr1, field2: expr2 }
+    ObjectFields(Vec<ObjectField>),
+}
+
+// ============================================================================
 // EXPRESSIONS
 // ============================================================================
 
@@ -291,11 +426,17 @@ pub enum Expression {
     /// Conditional: if cond { a } else { b }
     Conditional(Box<ConditionalExpr>),
     
-    /// Optional chaining: x?.y
-    OptionalChain(Box<MemberExpr>),
+    /// Optional member access: obj?.member
+    /// Returns None if obj is None, otherwise returns obj.member
+    OptionalMember(Box<OptionalMemberExpr>),
     
-    /// Nil coalescing: x ?? default
-    NilCoalesce(Box<BinaryExpr>),
+    /// Optional method call: obj?.method(args)
+    /// Returns None if obj is None, otherwise calls method
+    OptionalMethodCall(Box<OptionalMethodCallExpr>),
+    
+    /// Nil coalescing: expr ?? default
+    /// Returns expr if not nil, otherwise returns default
+    NilCoalescing(Box<NilCoalescingExpr>),
     
     /// Breadcrumb constructor (ULissy-specific)
     Breadcrumb(Box<BreadcrumbExpr>),
@@ -308,6 +449,12 @@ pub enum Expression {
     
     /// Grouped expression: (expr)
     Grouped(Box<Expression>),
+    
+    /// Object literal: { field1: value1, field2: value2 }
+    ObjectLiteral(Box<ObjectLiteralExpr>),
+    
+    /// Interpolated string: "Hello, \(name)!"
+    InterpolatedString(Box<InterpolatedStringExpr>),
 }
 
 #[derive(Debug, Clone)]
@@ -395,6 +542,161 @@ pub struct MethodCallExpr {
     pub method: String,
     pub arguments: Vec<Argument>,
     pub span: Span,
+}
+
+/// Optional member access expression: obj?.member
+/// 
+/// Example: `me.trajectory.last?.hash`
+/// 
+/// Semantics: If the object is None/nil, the entire expression evaluates
+/// to None. Otherwise, access the member as normal.
+#[derive(Debug, Clone)]
+pub struct OptionalMemberExpr {
+    /// The object being accessed (may be optional)
+    pub object: Expression,
+    /// The member name to access
+    pub member: String,
+    /// Source location
+    pub span: Span,
+}
+
+/// Optional method call expression: obj?.method(args)
+/// 
+/// Example: `me.trajectory.last?.signed(me)`
+/// 
+/// Semantics: If the object is None/nil, the entire expression evaluates
+/// to None without calling the method. Otherwise, call the method.
+#[derive(Debug, Clone)]
+pub struct OptionalMethodCallExpr {
+    /// The object on which to call the method (may be optional)
+    pub object: Expression,
+    /// The method name
+    pub method: String,
+    /// The arguments to pass
+    pub arguments: Vec<Argument>,
+    /// Source location
+    pub span: Span,
+}
+
+/// Nil coalescing expression: expr ?? default
+/// 
+/// Example: `prevHash ?? "genesis"`
+/// 
+/// Semantics: If expr is None/nil, return default. Otherwise return expr.
+/// This is equivalent to Rust's `.unwrap_or()` or Swift's `??`.
+#[derive(Debug, Clone)]
+pub struct NilCoalescingExpr {
+    /// The primary expression (may be None)
+    pub primary: Expression,
+    /// The fallback value if primary is None
+    pub fallback: Expression,
+    /// Source location
+    pub span: Span,
+}
+
+/// Object literal expression: { field1: value1, field2: value2, ... }
+///
+/// Example: `{ x: 10, y: 20, name: "point" }`
+#[derive(Debug, Clone)]
+pub struct ObjectLiteralExpr {
+    /// The fields of the object
+    pub fields: Vec<ObjectField>,
+    
+    /// Optional type hint: { x: 10, y: 20 } as Point
+    pub type_hint: Option<String>,
+    
+    /// Source location
+    pub span: Span,
+}
+
+/// A single field in an object literal
+#[derive(Debug, Clone)]
+pub struct ObjectField {
+    /// Field name
+    pub name: String,
+    
+    /// Field value
+    /// None for shorthand: { x } means { x: x }
+    pub value: Option<Expression>,
+    
+    /// Source location
+    pub span: Span,
+}
+
+impl ObjectLiteralExpr {
+    /// Create a new object literal
+    pub fn new(fields: Vec<ObjectField>, span: Span) -> Self {
+        ObjectLiteralExpr {
+            fields,
+            type_hint: None,
+            span,
+        }
+    }
+    
+    /// Check if object has a field
+    pub fn has_field(&self, name: &str) -> bool {
+        self.fields.iter().any(|f| f.name == name)
+    }
+}
+
+impl ObjectField {
+    /// Create a field with explicit value
+    pub fn new(name: String, value: Expression, span: Span) -> Self {
+        ObjectField {
+            name,
+            value: Some(value),
+            span,
+        }
+    }
+    
+    /// Create a shorthand field: { x } meaning { x: x }
+    pub fn shorthand(name: String, span: Span) -> Self {
+        ObjectField {
+            name,
+            value: None,
+            span,
+        }
+    }
+}
+
+impl std::fmt::Display for ObjectLiteralExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{ ")?;
+        for (i, field) in self.fields.iter().enumerate() {
+            if i > 0 { write!(f, ", ")?; }
+            write!(f, "{}", field.name)?;
+            if let Some(value) = &field.value {
+                write!(f, ": {:?}", value)?;
+            }
+        }
+        write!(f, " }}")?;
+        if let Some(hint) = &self.type_hint {
+            write!(f, " as {}", hint)?;
+        }
+        Ok(())
+    }
+}
+
+/// Interpolated string expression
+///
+/// Example: "Hello, \(name)! You have \(count) messages."
+#[derive(Debug, Clone)]
+pub struct InterpolatedStringExpr {
+    /// The parts of the string (literals and expressions)
+    pub parts: Vec<InterpolatedPart>,
+    
+    /// Source location
+    pub span: Span,
+}
+
+/// A part of an interpolated string
+#[derive(Debug, Clone)]
+pub enum InterpolatedPart {
+    /// Literal text: "Hello, "
+    Literal(String),
+    
+    /// Expression to interpolate: \(name)
+    Expression(Expression),
 }
 
 #[derive(Debug, Clone)]
