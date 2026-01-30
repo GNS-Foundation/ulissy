@@ -1,0 +1,419 @@
+{
+  "Identity Declaration": {
+    "prefix": "identity",
+    "body": [
+      "identity ${1:me} = Keychain.${2|primary,facet(\"$3\")|}",
+      "$0"
+    ],
+    "description": "Declare a cryptographic identity"
+  },
+  "Identity Primary": {
+    "prefix": "idp",
+    "body": [
+      "identity ${1:me} = Keychain.primary",
+      "$0"
+    ],
+    "description": "Declare primary identity from keychain"
+  },
+  "Identity Facet": {
+    "prefix": "idf",
+    "body": [
+      "identity ${1:work} = Keychain.facet(\"${2:organization}\")",
+      "$0"
+    ],
+    "description": "Declare facet identity"
+  },
+  "Every Block": {
+    "prefix": "every",
+    "body": [
+      "every ${1:10}.${2|minutes,seconds,hours|} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Periodic execution block"
+  },
+  "Every When Block": {
+    "prefix": "everywhen",
+    "body": [
+      "every ${1:10}.${2|minutes,seconds,hours|} when ${3:battery > 20} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Conditional periodic execution block"
+  },
+  "When Block": {
+    "prefix": "when",
+    "body": [
+      "when ${1:condition} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Condition trigger block"
+  },
+  "After Block": {
+    "prefix": "after",
+    "body": [
+      "after ${1:5}.${2|seconds,minutes,hours|} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Delayed execution block"
+  },
+  "Config Block": {
+    "prefix": "config",
+    "body": [
+      "config {",
+      "\t${1:resolution}: ${2:7},",
+      "\t${3:interval}: ${4:10}.${5|minutes,seconds,hours|},",
+      "\t${6:threshold}: ${7:100}",
+      "}",
+      "$0"
+    ],
+    "description": "Module configuration block"
+  },
+  "Type Definition": {
+    "prefix": "type",
+    "body": [
+      "type ${1:Name} {",
+      "\t${2:field}: ${3:Type}",
+      "\t$0",
+      "}"
+    ],
+    "description": "Define a new type"
+  },
+  "Type with Computed": {
+    "prefix": "typec",
+    "body": [
+      "type ${1:Name} {",
+      "\t${2:field}: ${3:Type}",
+      "\t",
+      "\tcomputed ${4:derived}: ${5:Type} = ${6:expression}",
+      "}"
+    ],
+    "description": "Type with computed property"
+  },
+  "Type with Invariant": {
+    "prefix": "typei",
+    "body": [
+      "type ${1:Name} {",
+      "\t${2:field}: ${3:Type}",
+      "\t",
+      "\tinvariant ${4:condition}",
+      "}"
+    ],
+    "description": "Type with invariant constraint"
+  },
+  "Enum Definition": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name} {",
+      "\t${2:variant1},",
+      "\t${3:variant2}",
+      "}"
+    ],
+    "description": "Define an enum"
+  },
+  "Function Definition": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Define a function"
+  },
+  "Async Function": {
+    "prefix": "afn",
+    "body": [
+      "async fn ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Define an async function"
+  },
+  "Computed Property": {
+    "prefix": "computed",
+    "body": [
+      "computed ${1:name}: ${2:Type} = ${3:expression}"
+    ],
+    "description": "Standalone computed property"
+  },
+  "Computed Object": {
+    "prefix": "computedo",
+    "body": [
+      "computed ${1:name}: ${2:Type} {",
+      "\t${3:field}: ${4:value}",
+      "}"
+    ],
+    "description": "Computed property with object body"
+  },
+  "Let Declaration": {
+    "prefix": "let",
+    "body": [
+      "let ${1:name} = ${2:value}"
+    ],
+    "description": "Immutable variable"
+  },
+  "Let with Type": {
+    "prefix": "lett",
+    "body": [
+      "let ${1:name}: ${2:Type} = ${3:value}"
+    ],
+    "description": "Immutable variable with type annotation"
+  },
+  "Var Declaration": {
+    "prefix": "var",
+    "body": [
+      "var ${1:name} = ${2:value}"
+    ],
+    "description": "Mutable variable"
+  },
+  "Const Declaration": {
+    "prefix": "const",
+    "body": [
+      "const ${1:NAME} = ${2:value}"
+    ],
+    "description": "Constant declaration"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "If Else": {
+    "prefix": "ife",
+    "body": [
+      "if ${1:condition} {",
+      "\t$2",
+      "} else {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If-else statement"
+  },
+  "Match Statement": {
+    "prefix": "match",
+    "body": [
+      "match ${1:value} {",
+      "\tcase ${2:pattern}: {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Pattern matching"
+  },
+  "Send Statement": {
+    "prefix": "send",
+    "body": [
+      "send to ${1:@recipient} {",
+      "\ttype: \"${2:message_type}\",",
+      "\t${3:content}: ${4:value}",
+      "}"
+    ],
+    "description": "Send encrypted message"
+  },
+  "Breadcrumb Collection": {
+    "prefix": "breadcrumb",
+    "body": [
+      "let crumb = breadcrumb(",
+      "\tcell: here.h3(${1:7}),",
+      "\tsource: .${2|gps,wifi,cell,fused|},",
+      "\tcontext: sensors.digest(),",
+      "\tprevious: ${3:me}.trajectory.lastHash",
+      ").signed(${3:me})",
+      "",
+      "${3:me}.trajectory.append(crumb)"
+    ],
+    "description": "Collect a breadcrumb"
+  },
+  "Trajectory Collection Loop": {
+    "prefix": "trajectory",
+    "body": [
+      "every ${1:10}.minutes when battery > ${2:20} && gps.available {",
+      "\tlet crumb = breadcrumb(",
+      "\t\tcell: here.h3(${3:7}),",
+      "\t\tcontext: sensors.digest(),",
+      "\t\tprevious: ${4:me}.trajectory.lastHash",
+      "\t).signed(${4:me})",
+      "\t",
+      "\t${4:me}.trajectory.append(crumb)",
+      "}"
+    ],
+    "description": "Full trajectory collection loop"
+  },
+  "Epoch Publishing": {
+    "prefix": "epoch",
+    "body": [
+      "when ${1:me}.trajectory.pending >= ${2:100} {",
+      "\tlet epoch = ${1:me}.trajectory.bundleEpoch()",
+      "\tlet signedEpoch = epoch.signed(${1:me})",
+      "\tnetwork.publish(signedEpoch)",
+      "}"
+    ],
+    "description": "Epoch publishing trigger"
+  },
+  "DIX Post": {
+    "prefix": "dix",
+    "body": [
+      "dix@${1:me}.post(\"${2:content}\", visibility: .${3|public,private,followers,network|})"
+    ],
+    "description": "Post to DIX timeline"
+  },
+  "Home Command": {
+    "prefix": "home",
+    "body": [
+      "home@${1:me}/${2:device}.${3|set,get,command|}(${4:property}: ${5:value})"
+    ],
+    "description": "Home automation command"
+  },
+  "Pay Request": {
+    "prefix": "pay",
+    "body": [
+      "pay@${1:merchant}.request(${2:amount}.${3:USD})"
+    ],
+    "description": "Payment request"
+  },
+  "Import": {
+    "prefix": "import",
+    "body": [
+      "import ulissy.${1|prelude,spatial,crypto,temporal,sensors,trajectory,messaging,network|}"
+    ],
+    "description": "Import ULissy module"
+  },
+  "Import Prelude": {
+    "prefix": "imp",
+    "body": [
+      "import ulissy.prelude"
+    ],
+    "description": "Import all common types"
+  },
+  "Result Ok": {
+    "prefix": "ok",
+    "body": [
+      "Result.ok(${1:value})"
+    ],
+    "description": "Successful result"
+  },
+  "Result Error": {
+    "prefix": "err",
+    "body": [
+      "Result.error(\"${1:error message}\")"
+    ],
+    "description": "Error result"
+  },
+  "Option Some": {
+    "prefix": "some",
+    "body": [
+      "Option.some(${1:value})"
+    ],
+    "description": "Some optional value"
+  },
+  "Option None": {
+    "prefix": "none",
+    "body": [
+      "Option.none"
+    ],
+    "description": "No value"
+  },
+  "H3 Cell": {
+    "prefix": "h3",
+    "body": [
+      "here.h3(${1:7})"
+    ],
+    "description": "Get current H3 cell"
+  },
+  "Hash": {
+    "prefix": "sha",
+    "body": [
+      "sha256(${1:data})"
+    ],
+    "description": "SHA-256 hash"
+  },
+  "Sign": {
+    "prefix": "sign",
+    "body": [
+      "${1:data}.signed(${2:identity})"
+    ],
+    "description": "Sign data with identity"
+  },
+  "Verify": {
+    "prefix": "verify",
+    "body": [
+      "${1:signature}.verify(${2:data}, ${3:publicKey})"
+    ],
+    "description": "Verify signature"
+  },
+  "Print Debug": {
+    "prefix": "print",
+    "body": [
+      "print(\"${1:message}\")"
+    ],
+    "description": "Debug print"
+  },
+  "Print Interpolated": {
+    "prefix": "printi",
+    "body": [
+      "print(\"${1:message}: \\(${2:value})\")"
+    ],
+    "description": "Debug print with interpolation"
+  },
+  "ULissy Program Template": {
+    "prefix": "ulissy",
+    "body": [
+      "// ${1:Program Name}",
+      "// ${2:Description}",
+      "",
+      "import ulissy.prelude",
+      "",
+      "identity me = Keychain.primary",
+      "",
+      "config {",
+      "\tresolution: 7,",
+      "\tinterval: 10.minutes",
+      "}",
+      "",
+      "$0"
+    ],
+    "description": "Full ULissy program template"
+  },
+  "Trajectory Program Template": {
+    "prefix": "ulissyt",
+    "body": [
+      "// Proof-of-Trajectory Collection",
+      "// Collects breadcrumbs to prove humanity",
+      "",
+      "import ulissy.prelude",
+      "",
+      "identity me = Keychain.primary",
+      "",
+      "config {",
+      "\tresolution: 7,",
+      "\tinterval: 10.minutes,",
+      "\tminBreadcrumbsPerEpoch: 100",
+      "}",
+      "",
+      "// Main collection loop",
+      "every config.interval when battery > 20 && gps.available {",
+      "\tlet crumb = breadcrumb(",
+      "\t\tcell: here.h3(config.resolution),",
+      "\t\tcontext: sensors.digest(),",
+      "\t\tprevious: me.trajectory.lastHash ?? \"genesis\"",
+      "\t).signed(me)",
+      "\t",
+      "\tme.trajectory.append(crumb)",
+      "}",
+      "",
+      "// Epoch publishing",
+      "when me.trajectory.pending >= config.minBreadcrumbsPerEpoch {",
+      "\tlet epoch = me.trajectory.bundleEpoch().signed(me)",
+      "\tnetwork.publish(epoch)",
+      "}",
+      ""
+    ],
+    "description": "Full trajectory collection program"
+  }
+}

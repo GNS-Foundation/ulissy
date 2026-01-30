@@ -1,0 +1,227 @@
+// trajectory.ul - Proof-of-Trajectory Collection
+// Example program demonstrating ULissy syntax highlighting
+//
+// This file collects location breadcrumbs to prove humanity
+// through trajectory rather than biometrics.
+
+import ulissy.prelude
+
+// ============================================================================
+// IDENTITY
+// ============================================================================
+
+/// Primary identity from secure keychain
+identity me = Keychain.primary
+
+/// Work facet identity
+identity work = Keychain.facet("anthropic")
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+config {
+    resolution: 7,              // H3 resolution (neighborhood level)
+    interval: 10.minutes,       // Collection frequency
+    minBreadcrumbsPerEpoch: 100,
+    batteryThreshold: 20,
+    maxSpeedKmh: 150.0          // For reachability validation
+}
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+/// Collection status for UI display
+type CollectionStatus {
+    isActive: Bool
+    totalCount: Int
+    pendingCount: Int
+    epochCount: Int
+    lastCollection: Moment?
+    
+    computed progress: Float = Float(self.pendingCount) / 100.0
+    computed readyForEpoch: Bool = self.pendingCount >= 100
+    
+    invariant totalCount >= 0
+    invariant pendingCount >= 0
+}
+
+/// Location sources for breadcrumbs
+enum LocationSource {
+    gps,        // GPS satellite fix
+    wifi,       // WiFi positioning
+    cell,       // Cell tower triangulation
+    ip,         // IP geolocation
+    fused       // Combined sources
+}
+
+// ============================================================================
+// COMPUTED PROPERTIES
+// ============================================================================
+
+/// Reactive status property
+computed status: CollectionStatus {
+    isActive: collection.running,
+    totalCount: me.trajectory.count,
+    pendingCount: me.trajectory.pending,
+    epochCount: me.trajectory.epochs.count,
+    lastCollection: me.trajectory.last?.timestamp
+}
+
+/// Current progress toward epoch
+computed epochProgress: Float = Float(me.trajectory.pending) / Float(config.minBreadcrumbsPerEpoch)
+
+// ============================================================================
+// MAIN COLLECTION LOOP
+// ============================================================================
+
+every config.interval when battery > config.batteryThreshold && gps.available {
+    // Get current location as H3 cell (privacy-preserving)
+    let cell = here.h3(config.resolution)
+    
+    // Get sensor context digest
+    let context = sensors.digest()
+    
+    // Get previous hash for chain linking
+    let previous = me.trajectory.last?.hash ?? sha256String("genesis")
+    
+    // Create and sign breadcrumb
+    let crumb = breadcrumb(
+        cell: cell,
+        source: .gps,
+        context: context,
+        previous: previous,
+        index: Uint64(me.trajectory.count)
+    ).signed(me)
+    
+    // Append to trajectory (validates chain)
+    let result = me.trajectory.append(crumb)
+    
+    match result {
+        case ok(updated): {
+            print("✓ Breadcrumb \(updated.count) collected at \(cell)")
+        }
+        case error(msg): {
+            print("✗ Collection failed: \(msg)")
+        }
+    }
+}
+
+// ============================================================================
+// EPOCH PUBLISHING
+// ============================================================================
+
+when me.trajectory.pending >= config.minBreadcrumbsPerEpoch {
+    print("📦 Bundling epoch with \(me.trajectory.pending) breadcrumbs...")
+    
+    // Bundle pending breadcrumbs into epoch
+    let epoch = me.trajectory.bundleEpoch()
+    
+    if epoch != nil {
+        // Sign the epoch
+        let signedEpoch = epoch!.signed(me)
+        
+        // Publish to network
+        let publishResult = network.publish(signedEpoch)
+        
+        if publishResult.success {
+            print("✓ Epoch published: \(publishResult.itemId!)")
+            
+            // Announce on DIX
+            dix@me.post(
+                "Published proof-of-trajectory epoch #\(signedEpoch.id.prefix(8))",
+                visibility: .public
+            )
+        } else {
+            print("✗ Publish failed: \(publishResult.error!)")
+        }
+    }
+}
+
+// ============================================================================
+// HANDLE CLAIM CHECK
+// ============================================================================
+
+when me.trajectory.meetsHandleThreshold && me.handle == nil {
+    print("🎉 You've collected enough breadcrumbs to claim a @handle!")
+    print("   Total epochs: \(me.trajectory.epochs.count)")
+    print("   Total breadcrumbs: \(me.trajectory.publishedCount)")
+    
+    // Notify user
+    send to @self {
+        type: "handle_ready",
+        message: "You can now claim your @handle!"
+    }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Collect a single breadcrumb manually
+fn collectNow(source: LocationSource = .gps) -> Result<Breadcrumb, String> {
+    if !gps.available && source == .gps {
+        return Result.error("GPS not available")
+    }
+    
+    let cell = here.h3(config.resolution)
+    let crumb = breadcrumb(
+        cell: cell,
+        source: source,
+        context: sensors.digest(),
+        previous: me.trajectory.lastHash ?? sha256String("genesis")
+    ).signed(me)
+    
+    return Result.ok(crumb)
+}
+
+/// Get estimated time to next epoch
+fn timeToEpoch() -> Duration? {
+    let remaining = config.minBreadcrumbsPerEpoch - me.trajectory.pending
+    if remaining <= 0 {
+        return nil
+    }
+    return config.interval * remaining
+}
+
+/// Validate the entire trajectory
+fn validateMyTrajectory() -> Bool {
+    let result = validateTrajectory(me.trajectory)
+    match result {
+        case ok(_): return true
+        case error(msg): {
+            print("Validation failed: \(msg)")
+            return false
+        }
+    }
+}
+
+// ============================================================================
+// FACET EXAMPLES
+// ============================================================================
+
+/// Post status update to DIX
+fn postStatus() {
+    let msg = "📍 Collected \(me.trajectory.count) breadcrumbs"
+    dix@me.post(msg, visibility: .followers)
+}
+
+/// Control home lights based on location
+fn updateHomeLights() {
+    let atHome = me.trajectory.last?.cell == home@me/location.cell
+    if atHome {
+        home@me/lights.set(brightness: 80.percent)
+    } else {
+        home@me/lights.set(brightness: 0.percent)
+    }
+}
+
+/// Send encrypted message to another user
+fn sendMessageTo(recipient: Handle, content: String) {
+    send to recipient {
+        type: "chat",
+        message: content,
+        timestamp: now.iso8601
+    }
+}

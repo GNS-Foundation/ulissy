@@ -1,0 +1,224 @@
+{
+  "name": "ulissy",
+  "displayName": "ULissy",
+  "description": "ULissy language support - A Programming Language for Moving Machines",
+  "version": "0.2.0",
+  "publisher": "gns-foundation",
+  "author": {
+    "name": "GNS Foundation",
+    "email": "foundation@gns.foundation"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gns-protocol/ulissy-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/gns-protocol/ulissy-vscode/issues"
+  },
+  "homepage": "https://github.com/gns-protocol/ULissy_Program",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "keywords": [
+    "ulissy",
+    "gns",
+    "geospatial",
+    "blockchain",
+    "identity",
+    "proof-of-trajectory"
+  ],
+  "activationEvents": [
+    "onLanguage:ulissy"
+  ],
+  "main": "./out/extension.js",
+  "icon": "icons/ulissy-icon.png",
+  "galleryBanner": {
+    "color": "#1a1a2e",
+    "theme": "dark"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "ulissy",
+        "aliases": [
+          "ULissy",
+          "ulissy"
+        ],
+        "extensions": [
+          ".ul"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/ulissy-icon.png",
+          "dark": "./icons/ulissy-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ulissy",
+        "scopeName": "source.ulissy",
+        "path": "./syntaxes/ulissy.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ulissy",
+        "path": "./snippets/ulissy.snippets.json"
+      }
+    ],
+    "configuration": {
+      "title": "ULissy",
+      "properties": {
+        "ulissy.compilerPath": {
+          "type": "string",
+          "default": "ulissy",
+          "description": "Path to the ULissy compiler executable"
+        },
+        "ulissy.enableLSP": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Language Server Protocol features"
+        },
+        "ulissy.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run type checker when saving files"
+        },
+        "ulissy.formatOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Format document when saving"
+        },
+        "ulissy.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace communication with the language server"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "ulissy.build",
+        "title": "ULissy: Build Current File",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ulissy.check",
+        "title": "ULissy: Type Check Current File",
+        "icon": "$(check)"
+      },
+      {
+        "command": "ulissy.run",
+        "title": "ULissy: Build and Run",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "ulissy.showTokens",
+        "title": "ULissy: Show Lexer Tokens (Debug)"
+      },
+      {
+        "command": "ulissy.showAST",
+        "title": "ULissy: Show Parsed AST (Debug)"
+      },
+      {
+        "command": "ulissy.newProject",
+        "title": "ULissy: Create New Project"
+      },
+      {
+        "command": "ulissy.restartServer",
+        "title": "ULissy: Restart Language Server"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == ulissy",
+          "command": "ulissy.build",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "resourceLangId == ulissy",
+          "command": "ulissy.build",
+          "group": "ulissy@1"
+        },
+        {
+          "when": "resourceLangId == ulissy",
+          "command": "ulissy.check",
+          "group": "ulissy@2"
+        },
+        {
+          "when": "resourceLangId == ulissy",
+          "command": "ulissy.run",
+          "group": "ulissy@3"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "ulissy.build",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "resourceLangId == ulissy"
+      },
+      {
+        "command": "ulissy.check",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "resourceLangId == ulissy"
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "ulissy",
+        "owner": "ulissy",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^error\\[E(\\d+)\\]: (.+)$\\n\\s+--> (.+):(\\d+):(\\d+)",
+          "file": 3,
+          "line": 4,
+          "column": 5,
+          "code": 1,
+          "message": 2
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.2"
+  }
+}
