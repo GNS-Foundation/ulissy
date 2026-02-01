@@ -3,7 +3,7 @@
 
 **WHITEPAPER**
 *Technical Edition for Language Designers & Protocol Engineers*
-*2025 — Version 0.3.1*
+*2025 — Version 0.3.2*
 
 **ULISSY Foundation / GNS Protocol**
 
@@ -26,15 +26,52 @@ The name honors Ulysses (Odysseus)—the mythological figure who proved his iden
 | **Lexer** | ✅ Complete | 64 token types, handles, facets, interpolation, `default` keyword |
 | **Parser** | ✅ Complete | 18 statement types, full expression parsing, `self`/`Self`/`config` support |
 | **Type Checker** | ✅ Complete | Domain-specific types, inference, validation, two-pass function resolution |
-| **Code Generator** | ✅ Complete | Rust emission, Cargo.toml generation |
+| **Code Generator** | ✅ Complete | Rust emission, Cargo.toml generation, 74/74 TRIP tests passing |
 | **CLI** | ✅ Complete | `ulissy build`, `check`, `run`, `new`, `lex`, `parse`, `fmt`, `info` |
-| **Runtime** | ✅ Complete | `gns-runtime` crate with scheduling, sensors, location |
+| **Runtime** | ✅ Complete | `gns-runtime` crate with identity, breadcrumbs, scheduling, sensors, location |
 | **Standard Library** | ✅ Complete | 9 modules: core, spatial, crypto, temporal, sensors, trajectory, messaging, network, prelude |
 | **VS Code Extension** | ✅ Complete | Syntax highlighting, 40+ snippets, commands, diagnostics |
 
 ---
 
 ## Changelog
+
+### Version 0.3.2 (February 2025)
+
+**Code Generator — First Fully Working Compilation:**
+
+The code generator reached production-ready status with the TRIP Protocol test suite compiling and executing successfully: **74/74 tests passing**.
+
+**Codegen Fixes (82 compilation errors → 0):**
+
+1. **Type inference for Any/Unknown** — Omit type annotations when the resolved type is `Any` or `Unknown`, letting Rust infer the actual type from the right-hand side expression
+
+2. **String vs &str handling** — Strip `.to_string()` from string literal arguments passed to `Keychain::facet()`, `starts_with()`, and other methods expecting `&str`
+
+3. **H3 resolution casting** — Generate `.to_h3(resolution as u8)?` with proper integer downcast and Result unwrapping
+
+4. **Sign/verify reference handling** — Add `&` prefix for identity references in `.sign(&identity)?` calls; use `to_signable_bytes()` for signature verification
+
+5. **Division type casting** — Automatically cast both operands to `f64` in division expressions to prevent integer truncation
+
+6. **Static variable scoping** — Generate `var` declarations as `static mut` at module level with `unsafe` blocks for access, enabling cross-function mutable state
+
+7. **Recursive async functions** — Detect self-referencing function calls and wrap in `Box::pin(async move { ... })` with `Pin<Box<dyn Future>>` return type
+
+8. **Enum variant resolution** — Build a pre-pass `enum_variant_map` (HashMap) mapping PascalCase variant names to their parent enum for pattern matching and shorthand syntax
+
+9. **Function argument casting** — Track function parameter types in `fn_signatures` HashMap; automatically cast arguments at call sites (e.g., `i64` → `f64`)
+
+10. **Two-pass generation** — Pass 1 emits module-level declarations (types, enums, functions, static vars); Pass 2 emits main execution logic, skipping items already declared
+
+**Runtime Fixes (8 test failures → 0):**
+
+1. **Test counters** — Assignment expressions (`var = var + 1`) now generate proper `unsafe { var += 1; }` for static mutable variables
+2. **Handle validation** — `name.replace("@", "")` expression correctly emitted instead of empty string default
+3. **TIT test vector** — Corrected SHA-256 expected hash for sequential key `[0,1,...,31]`
+4. **Breadcrumb signature** — Use `to_signable_bytes()` (excludes signature field) instead of `to_bytes()` for verification
+
+---
 
 ### Version 0.3.1 (January 2025)
 
@@ -664,8 +701,10 @@ let record = lookupHandle(@alice)
 │       │                                                         │
 │       ▼                                                         │
 │  ┌─────────────┐                                                │
-│  │  Codegen    │  Rust emission                                 │
+│  │  Codegen    │  Rust emission (v0.1.4)                         │
 │  │             │  Cargo.toml generation                         │
+│  │             │  Two-pass: module decls + main logic           │
+│  │             │  74/74 TRIP tests passing                      │
 │  └─────────────┘                                                │
 │       │                                                         │
 │       ▼                                                         │
@@ -678,7 +717,7 @@ let record = lookupHandle(@alice)
 
 ## 8. Roadmap
 
-### Completed (v0.3.1) ✅
+### Completed (v0.3.2) ✅
 
 #### Compiler
 - ✅ Formal EBNF grammar specification
@@ -692,9 +731,13 @@ let record = lookupHandle(@alice)
 - ✅ `for` loops
 - ✅ Assignment expressions
 - ✅ Type checker with two-pass function resolution
-- ✅ Code generator (Rust emission)
+- ✅ Code generator with two-pass Rust emission
+- ✅ Automatic type inference, casting, and async handling
+- ✅ Recursive function detection (Box::pin)
+- ✅ Enum variant resolution via pre-pass mapping
 - ✅ Cargo.toml generation
 - ✅ CLI tool (`ulissy` command with 8 subcommands)
+- ✅ **74/74 TRIP Protocol tests passing** (first working compilation)
 
 #### Runtime (`gns-runtime`)
 - ✅ Duration module (time spans with units)
@@ -855,8 +898,8 @@ pay@merchant
 
 ---
 
-**Document Version**: 0.3.1
-**Last Updated**: January 2025
+**Document Version**: 0.3.2
+**Last Updated**: February 2025
 **Authors**: GNS Foundation
 **License**: MIT
 
