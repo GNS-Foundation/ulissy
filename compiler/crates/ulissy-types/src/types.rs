@@ -128,6 +128,24 @@ impl Type {
     pub fn binary_result(&self, op: &ast::BinaryOp, other: &Type) -> Option<Type> {
         use ast::BinaryOp::*;
         
+        // For comparisons and logical ops, result is always Bool, even with Any
+        match op {
+            Eq | NotEq | Lt | Gt | LtEq | GtEq | And | Or | Within | Near => {
+                if *self == Type::Any || *other == Type::Any {
+                    return Some(Type::Bool);
+                }
+            }
+            _ => {
+                // For arithmetic, propagate type if Any
+                if *self == Type::Any {
+                    return Some(other.clone());
+                }
+                if *other == Type::Any {
+                    return Some(self.clone());
+                }
+            }
+        }
+        
         match op {
             // Arithmetic: requires numeric, returns numeric
             Add | Sub | Mul | Div | Mod => {
@@ -151,7 +169,12 @@ impl Type {
             // Comparison: requires compatible types, returns Bool
             Eq | NotEq => Some(Type::Bool),
             Lt | Gt | LtEq | GtEq => {
-                if self.is_numeric() && other.is_numeric() {
+                let is_compat = (self.is_numeric() && other.is_numeric()) ||
+                                (*self == Type::Moment && *other == Type::Moment) ||
+                                (*self == Type::Duration && *other == Type::Duration) ||
+                                (*self == Type::Distance && *other == Type::Distance);
+                
+                if is_compat {
                     Some(Type::Bool)
                 } else {
                     None
@@ -294,6 +317,11 @@ pub enum TypedStatementKind {
         variants: Vec<TypedEnumVariant>,
     },
     
+    TypeDecl {
+        name: String,
+        fields: Vec<(String, Type)>,
+    },
+    
     ConfigBlock {
         fields: Vec<TypedConfigField>,
     },
@@ -303,6 +331,51 @@ pub enum TypedStatementKind {
         inferred_type: Type,
         body: TypedComputedBody,
     },
+    
+    FnDecl {
+        name: String,
+        params: Vec<TypedParam>,
+        return_type: Type,
+        body: Vec<TypedStatement>,
+    },
+    
+    ReturnStatement(Option<TypedExpr>),
+    
+    IfStatement {
+        condition: TypedExpr,
+        then_block: Vec<TypedStatement>,
+        else_block: Option<Vec<TypedStatement>>,
+    },
+    
+    ForStatement {
+        item_name: String,
+        collection: TypedExpr,
+        body: Vec<TypedStatement>,
+    },
+    
+    MatchStatement {
+        expr: TypedExpr,
+        cases: Vec<TypedMatchCase>,
+    },
+    
+    AfterBlock {
+        delay: TypedExpr,
+        body: Vec<TypedStatement>,
+    },
+}
+
+#[derive(Debug)]
+pub struct TypedMatchCase {
+    pub pattern: ast::Pattern,
+    pub guard: Option<TypedExpr>,
+    pub body: Vec<TypedStatement>,
+}
+
+/// A typed function parameter
+#[derive(Debug, Clone)]
+pub struct TypedParam {
+    pub name: String,
+    pub param_type: Type,
 }
 
 /// A typed enum variant

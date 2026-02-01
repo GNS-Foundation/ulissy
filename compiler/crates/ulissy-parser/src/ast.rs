@@ -73,6 +73,9 @@ pub enum Statement {
     
     /// computed name: Type = expr  OR  computed name: Type { fields }
     ComputedPropertyDecl(ComputedPropertyDecl),
+    
+    /// for item in collection { body }
+    ForStatement(ForStatement),
 }
 
 // ============================================================================
@@ -315,6 +318,19 @@ pub struct ImportStatement {
     pub span: Span,
 }
 
+/// for item in collection { body }
+#[derive(Debug, Clone)]
+pub struct ForStatement {
+    /// Loop variable name
+    pub variable: String,
+    /// Collection/iterable expression
+    pub iterable: Expression,
+    /// Loop body
+    pub body: Block,
+    /// Source location
+    pub span: Span,
+}
+
 // ============================================================================
 // CONFIG BLOCK (Module-level configuration)
 // ============================================================================
@@ -455,6 +471,9 @@ pub enum Expression {
     
     /// Interpolated string: "Hello, \(name)!"
     InterpolatedString(Box<InterpolatedStringExpr>),
+    
+    /// Assignment expression: x = expr
+    Assignment(Box<AssignmentExpr>),
 }
 
 #[derive(Debug, Clone)]
@@ -735,6 +754,17 @@ pub struct BreadcrumbExpr {
 pub struct UnitValueExpr {
     pub value: Expression,
     pub unit: String,
+    pub span: Span,
+}
+
+/// Assignment expression: target = value
+#[derive(Debug, Clone)]
+pub struct AssignmentExpr {
+    /// The target of the assignment (identifier or member access)
+    pub target: Expression,
+    /// The value being assigned
+    pub value: Expression,
+    /// Source location
     pub span: Span,
 }
 

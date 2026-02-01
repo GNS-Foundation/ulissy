@@ -121,6 +121,11 @@ impl H3Cell {
         self.index.into()
     }
     
+    /// Get the raw index value (alias for as_u64)
+    pub fn index(&self) -> u64 {
+        self.index.into()
+    }
+    
     /// Get the H3 index as string
     pub fn as_string(&self) -> String {
         self.index.to_string()

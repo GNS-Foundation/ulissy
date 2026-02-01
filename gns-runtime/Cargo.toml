@@ -1,6 +1,6 @@
 [package]
 name = "gns-runtime"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["GNS Foundation <foundation@gns.foundation>"]
 description = "Runtime support library for ULissy - provides scheduling, location, sensors, and platform abstractions"
@@ -40,9 +40,13 @@ thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4"
+rand_core = "0.6"
 
 # Cryptographic hashing (for sensor digest)
 sha2 = "0.10"
+ed25519-dalek = "2"
+rand = "0.8"
+dirs = "5"
 
 # Logging
 tracing = "0.1"

@@ -24,6 +24,51 @@ impl TypeChecker {
     }
     
     pub fn check_program(&mut self, program: &ast::Program) -> Result<TypedProgram, Vec<TypeError>> {
+        // Pass 0: Register types and enums (forward declaration)
+        for stmt in &program.statements {
+             match stmt {
+                 ast::Statement::TypeDecl(decl) => {
+                      // Register Type placeholder
+                      self.context.register_type(&decl.name, Type::Named(decl.name.clone()));
+                 }
+                 ast::Statement::EnumDecl(decl) => {
+                      // Register Enum placeholder
+                      self.context.register_type(&decl.name, Type::Named(decl.name.clone()));
+                      // Register Variants
+                      for variant in &decl.variants {
+                          self.context.define(&variant.name, Type::Named(decl.name.clone()), true);
+                      }
+                 }
+                 _ => {}
+            }
+        }
+        
+        // Pass 1: collect all function declarations for forward reference support
+        for stmt in &program.statements {
+            if let ast::Statement::FnDecl(fn_decl) = stmt {
+                // Register function in scope before type checking bodies
+                let return_type = if let Some(ref type_expr) = fn_decl.return_type {
+                    self.resolve_type_expr(type_expr).unwrap_or(Type::Any)
+                } else {
+                    Type::Unit
+                };
+                
+                let param_types: Vec<Type> = fn_decl.params.iter()
+                    .map(|p| self.resolve_type_expr(&p.type_expr).unwrap_or(Type::Any))
+                    .collect();
+                
+                self.context.define(
+                    &fn_decl.name,
+                    Type::Function {
+                        params: param_types,
+                        ret: Box::new(return_type),
+                    },
+                    false,
+                );
+            }
+        }
+        
+        // Second pass: type check all statements
         let mut typed_statements = Vec::new();
         
         for stmt in &program.statements {
@@ -55,9 +100,16 @@ impl TypeChecker {
             ast::Statement::EnumDecl(decl) => self.check_enum_decl(decl),
             ast::Statement::ConfigBlock(config) => self.check_config_block(config),
             ast::Statement::ComputedPropertyDecl(computed) => self.check_computed_property_decl(computed),
+            ast::Statement::TypeDecl(decl) => self.check_type_decl(decl),
             ast::Statement::ExpressionStatement(expr) => self.check_expression_statement(expr),
+            ast::Statement::FnDecl(fn_decl) => self.check_fn_decl(fn_decl),
+            ast::Statement::ReturnStatement(ret) => self.check_return_statement(ret),
+            ast::Statement::IfStatement(if_stmt) => self.check_if_statement(if_stmt),
+            ast::Statement::ForStatement(for_stmt) => self.check_for_statement(for_stmt),
+            ast::Statement::MatchStatement(match_stmt) => self.check_match_statement(match_stmt),
+            ast::Statement::AfterBlock(after) => self.check_after_block(after),
             _ => {
-                // TODO: Implement remaining statement types
+                // TODO: Implement remaining statement types (Import)
                 Ok(TypedStatement {
                     kind: TypedStatementKind::ExpressionStatement(TypedExpr {
                         kind: TypedExprKind::Literal(ast::Literal::Nil),
@@ -477,6 +529,26 @@ impl TypeChecker {
         })
     }
     
+    fn check_type_decl(&mut self, decl: &ast::TypeDecl) -> Result<TypedStatement, TypeError> {
+        let mut fields = Vec::new();
+        for field in &decl.fields {
+            let ty = self.resolve_type_expr(&field.type_expr)?;
+            println!("DEBUG: TypeDecl {} field {} resolved to {:?}", decl.name, field.name, ty);
+            fields.push((field.name.clone(), ty));
+        }
+        
+        // Register the new type in the context
+        self.context.register_type(&decl.name, Type::Object { fields: fields.clone() });
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::TypeDecl {
+                name: decl.name.clone(),
+                fields,
+            },
+            span: decl.span,
+        })
+    }
+    
     fn check_expression_statement(&mut self, expr: &ast::Expression) -> Result<TypedStatement, TypeError> {
         let span = self.get_expr_span(expr);
         let typed = self.check_expression(expr)?;
@@ -486,6 +558,213 @@ impl TypeChecker {
         })
     }
     
+    fn check_fn_decl(&mut self, fn_decl: &ast::FnDecl) -> Result<TypedStatement, TypeError> {
+        // Enter a new scope for the function
+        self.context.push_scope();
+        
+        // Process parameters
+        let mut typed_params = Vec::new();
+        for param in &fn_decl.params {
+            let param_type = self.resolve_type_expr(&param.type_expr).unwrap_or(Type::Any);
+            self.context.define(&param.name, param_type.clone(), false);
+            typed_params.push(TypedParam {
+                name: param.name.clone(),
+                param_type,
+            });
+        }
+        
+        // Resolve return type
+        let return_type = if let Some(ref type_expr) = fn_decl.return_type {
+            self.resolve_type_expr(type_expr).unwrap_or(Type::Any)
+        } else {
+            Type::Unit
+        };
+        
+        // Type check the function body
+        let mut typed_body = Vec::new();
+        for stmt in &fn_decl.body.statements {
+            match self.check_statement(stmt) {
+                Ok(typed) => typed_body.push(typed),
+                Err(e) => self.errors.push(e),
+            }
+        }
+        
+        // Exit function scope
+        self.context.pop_scope();
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::FnDecl {
+                name: fn_decl.name.clone(),
+                params: typed_params,
+                return_type,
+                body: typed_body,
+            },
+            span: fn_decl.span,
+        })
+    }
+    
+    fn check_return_statement(&mut self, ret: &ast::ReturnStatement) -> Result<TypedStatement, TypeError> {
+        let typed_expr = if let Some(expr) = &ret.value {
+            Some(self.check_expression(expr)?)
+        } else {
+            None
+        };
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::ReturnStatement(typed_expr),
+            span: ret.span,
+        })
+    }
+    
+    fn check_if_statement(&mut self, stmt: &ast::IfStatement) -> Result<TypedStatement, TypeError> {
+        let condition = self.check_expression(&stmt.condition)?;
+        if condition.ty != Type::Bool && condition.ty != Type::Any {
+             return Err(TypeError::new(
+                 &format!("If condition must be Bool, found {}", condition.ty),
+                 stmt.span
+             ));
+        }
+        
+        let mut then_block = Vec::new();
+        self.context.push_scope();
+        for s in &stmt.then_branch.statements {
+             match self.check_statement(s) {
+                 Ok(t) => then_block.push(t),
+                 Err(e) => self.errors.push(e),
+             }
+        }
+        self.context.pop_scope();
+        
+        let else_block = if let Some(branch) = &stmt.else_branch {
+             // Handle Else or ElseIf
+             let stmts = match &**branch {
+                 ast::ElseBranch::Else(block) => {
+                     self.context.push_scope();
+                     let mut stmts = Vec::new();
+                     for s in &block.statements {
+                         match self.check_statement(s) {
+                             Ok(t) => stmts.push(t),
+                             Err(e) => self.errors.push(e),
+                         }
+                     }
+                     self.context.pop_scope();
+                     stmts
+                 }
+                 ast::ElseBranch::ElseIf(nested_if) => {
+                     // Recursively check
+                     vec![self.check_if_statement(nested_if)?]
+                 }
+             };
+             Some(stmts)
+        } else {
+             None
+        };
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::IfStatement {
+                condition, then_block, else_block
+            },
+            span: stmt.span,
+        })
+    }
+    
+    fn check_for_statement(&mut self, stmt: &ast::ForStatement) -> Result<TypedStatement, TypeError> {
+        let collection = self.check_expression(&stmt.iterable)?;
+        
+        // Determine item type
+        let item_type = match &collection.ty {
+            Type::Array(inner) => *inner.clone(),
+            Type::Any => Type::Any,
+            _ => return Err(TypeError::new(
+                &format!("Cannot iterate over {}", collection.ty),
+                stmt.span
+            )),
+        };
+        
+        let mut body = Vec::new();
+        self.context.push_scope();
+        self.context.define(&stmt.variable, item_type, false);
+        
+        for s in &stmt.body.statements {
+             match self.check_statement(s) {
+                 Ok(t) => body.push(t),
+                 Err(e) => self.errors.push(e),
+             }
+        }
+        self.context.pop_scope();
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::ForStatement {
+                item_name: stmt.variable.clone(),
+                collection,
+                body,
+            },
+            span: stmt.span,
+        })
+    }
+    
+    fn check_match_statement(&mut self, stmt: &ast::MatchStatement) -> Result<TypedStatement, TypeError> {
+        let expr = self.check_expression(&stmt.subject)?;
+        
+        let mut cases = Vec::new();
+        for case in &stmt.cases {
+            // New scope for each case (variables bound in pattern would go here)
+            self.context.push_scope();
+            
+            // TODO: Bind pattern variables
+            
+            let guard = if let Some(g) = &case.guard {
+                Some(self.check_expression(g)?)
+            } else {
+                None
+            };
+            
+            let mut body = Vec::new();
+            for s in &case.body.statements {
+                 match self.check_statement(s) {
+                     Ok(t) => body.push(t),
+                     Err(e) => self.errors.push(e),
+                 }
+            }
+            
+            cases.push(TypedMatchCase {
+                pattern: case.pattern.clone(),
+                guard,
+                body,
+            });
+            
+            self.context.pop_scope();
+        }
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::MatchStatement {
+                expr, cases
+            },
+            span: stmt.span,
+        })
+    }
+    
+    fn check_after_block(&mut self, block: &ast::AfterBlock) -> Result<TypedStatement, TypeError> {
+        let delay = self.check_expression(&block.delay)?;
+        
+        let mut body = Vec::new();
+        self.context.push_scope();
+        for s in &block.body.statements {
+             match self.check_statement(s) {
+                 Ok(t) => body.push(t),
+                 Err(e) => self.errors.push(e),
+             }
+        }
+        self.context.pop_scope();
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::AfterBlock {
+                delay, body
+            },
+            span: block.span,
+        })
+    }
+
     // ========================================================================
     // EXPRESSION CHECKING
     // ========================================================================
@@ -591,7 +870,9 @@ impl TypeChecker {
                 
                 let ty = match unary.operator {
                     ast::UnaryOp::Neg => {
-                        if operand.ty.is_numeric() {
+                        if operand.ty == Type::Any {
+                            Type::Any
+                        } else if operand.ty.is_numeric() {
                             operand.ty.clone()
                         } else {
                             return Err(TypeError::new(
@@ -601,7 +882,9 @@ impl TypeChecker {
                         }
                     }
                     ast::UnaryOp::Not => {
-                        if operand.ty == Type::Bool {
+                        if operand.ty == Type::Any {
+                            Type::Bool
+                        } else if operand.ty == Type::Bool {
                             Type::Bool
                         } else {
                             return Err(TypeError::new(
@@ -1055,11 +1338,17 @@ impl TypeChecker {
     fn resolve_type_expr(&self, type_expr: &ast::TypeExpr) -> Result<Type, TypeError> {
         match type_expr {
             ast::TypeExpr::Simple(name) => {
-                self.context.resolve_type(name)
+                let resolved = self.context.resolve_type(name)
                     .ok_or_else(|| TypeError::new(
                         &format!("Unknown type: {}", name),
                         ast::Span::default(),
-                    ))
+                    ))?;
+                
+                // For helper types (Object/Enum), use Named reference to keep the name in generator
+                match resolved {
+                    Type::Object { .. } | Type::Enum { .. } => Ok(Type::Named(name.clone())),
+                    _ => Ok(resolved),
+                }
             }
             ast::TypeExpr::Optional(inner) => {
                 let inner_type = self.resolve_type_expr(inner)?;

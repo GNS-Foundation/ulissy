@@ -81,6 +81,7 @@ impl Parser {
             Some(TokenKind::Import) => self.parse_import_statement(),
             Some(TokenKind::Config) => self.parse_config_block(),
             Some(TokenKind::Computed) => self.parse_computed_property_decl(),
+            Some(TokenKind::For) => self.parse_for_statement(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -562,8 +563,14 @@ impl Parser {
         
         let mut cases = Vec::new();
         while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
-            self.expect(TokenKind::Case)?;
-            let pattern = self.parse_pattern()?;
+            // Handle both 'case pattern:' and 'default:'
+            let pattern = if self.check(TokenKind::Default) {
+                self.advance(); // consume 'default'
+                Pattern::Wildcard
+            } else {
+                self.expect(TokenKind::Case)?;
+                self.parse_pattern()?
+            };
             
             let guard = if self.check(TokenKind::Where) {
                 self.advance();
@@ -633,6 +640,24 @@ impl Parser {
         };
         
         Ok(Statement::ReturnStatement(ReturnStatement { value, span: start }))
+    }
+
+    /// for item in collection { body }
+    fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
+        let start = self.current_span();
+        self.expect(TokenKind::For)?;
+        
+        let variable = self.expect_identifier()?;
+        self.expect(TokenKind::In)?;
+        let iterable = self.parse_expression()?;
+        let body = self.parse_block()?;
+        
+        Ok(Statement::ForStatement(ForStatement {
+            variable,
+            iterable,
+            body,
+            span: start,
+        }))
     }
 
     /// import ulissy.spatial
@@ -757,8 +782,27 @@ impl Parser {
     // ========================================================================
 
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        // Nil coalescing has lowest precedence (evaluated last)
-        self.parse_nil_coalescing_expr()
+        // Assignment has lowest precedence
+        self.parse_assignment_expr()
+    }
+    
+    /// Parse assignment expression: target = value
+    /// Assignment is right-associative: a = b = c becomes a = (b = c)
+    fn parse_assignment_expr(&mut self) -> Result<Expression, ParseError> {
+        let span = self.current_span();
+        let left = self.parse_nil_coalescing_expr()?;
+        
+        if self.check(TokenKind::Equal) {
+            self.advance(); // consume =
+            let value = self.parse_assignment_expr()?; // right-associative
+            return Ok(Expression::Assignment(Box::new(AssignmentExpr {
+                target: left,
+                value,
+                span,
+            })));
+        }
+        
+        Ok(left)
     }
 
     /// Parse nil coalescing expression: expr ?? default
@@ -1095,6 +1139,21 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Literal(Literal::Nil))
             }
+            // Handle 'self' keyword as identifier (for use in type invariants, methods, etc.)
+            Some(TokenKind::SelfLower) => {
+                self.advance();
+                Ok(Expression::Identifier("self".to_string()))
+            }
+            // Handle 'Self' keyword as identifier (for type references)
+            Some(TokenKind::SelfUpper) => {
+                self.advance();
+                Ok(Expression::Identifier("Self".to_string()))
+            }
+            // Handle 'config' keyword as identifier (for config.field access)
+            Some(TokenKind::Config) => {
+                self.advance();
+                Ok(Expression::Identifier("config".to_string()))
+            }
             Some(TokenKind::Identifier(name)) => {
                 self.advance();
                 Ok(Expression::Identifier(name))
@@ -1138,8 +1197,45 @@ impl Parser {
                 let variant = self.expect_identifier_or_keyword()?;
                 Ok(Expression::Identifier(format!(".{}", variant)))
             }
+            // Handle if expression: if cond { then } else { else }
+            Some(TokenKind::If) => {
+                self.parse_if_expression()
+            }
             _ => Err(self.error("Expected expression")),
         }
+    }
+    
+    /// Parse an if expression (as opposed to if statement)
+    /// Used when if appears in expression context: let x = if cond { a } else { b }
+    fn parse_if_expression(&mut self) -> Result<Expression, ParseError> {
+        let span = self.current_span();
+        self.expect(TokenKind::If)?;
+        
+        let condition = self.parse_expression()?;
+        let then_branch = self.parse_block()?;
+        
+        // If expressions must have an else branch to be complete expressions
+        self.expect(TokenKind::Else)?;
+        
+        let else_expr = if self.check(TokenKind::If) {
+            // else if ... - recursively parse as another if expression
+            self.parse_if_expression()?
+        } else {
+            // else { ... } - parse the final block
+            let else_block = self.parse_block()?;
+            // Convert block to expression
+            Expression::Block(else_block)
+        };
+        
+        // Convert then_branch block to expression
+        let then_expr = Expression::Block(then_branch);
+        
+        Ok(Expression::Conditional(Box::new(ConditionalExpr {
+            condition,
+            then_expr,
+            else_expr,
+            span,
+        })))
     }
     
     /// Parse object literal: { field1: value1, field2: value2, ... }

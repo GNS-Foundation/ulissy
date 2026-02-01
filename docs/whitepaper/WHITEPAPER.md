@@ -3,7 +3,7 @@
 
 **WHITEPAPER**
 *Technical Edition for Language Designers & Protocol Engineers*
-*2025 — Version 0.2.0*
+*2025 — Version 0.3.1*
 
 **ULISSY Foundation / GNS Protocol**
 
@@ -23,12 +23,63 @@ The name honors Ulysses (Odysseus)—the mythological figure who proved his iden
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| **Lexer** | ✅ Complete | 63 token types, handles, facets, interpolation |
-| **Parser** | ✅ Complete | 17 statement types, full expression parsing |
-| **Type Checker** | ✅ Complete | Domain-specific types, inference, validation |
+| **Lexer** | ✅ Complete | 64 token types, handles, facets, interpolation, `default` keyword |
+| **Parser** | ✅ Complete | 18 statement types, full expression parsing, `self`/`Self`/`config` support |
+| **Type Checker** | ✅ Complete | Domain-specific types, inference, validation, two-pass function resolution |
 | **Code Generator** | ✅ Complete | Rust emission, Cargo.toml generation |
 | **CLI** | ✅ Complete | `ulissy build`, `check`, `run`, `new`, `lex`, `parse`, `fmt`, `info` |
-| **Standard Library** | 🔄 In Progress | Core modules |
+| **Runtime** | ✅ Complete | `gns-runtime` crate with scheduling, sensors, location |
+| **Standard Library** | ✅ Complete | 9 modules: core, spatial, crypto, temporal, sensors, trajectory, messaging, network, prelude |
+| **VS Code Extension** | ✅ Complete | Syntax highlighting, 40+ snippets, commands, diagnostics |
+
+---
+
+## Changelog
+
+### Version 0.3.1 (January 2025)
+
+**Parser Enhancements:**
+
+1. **`self` keyword support** — Added handling for `SelfLower` token so `self` can be used in expressions (e.g., in type invariants like `signature.verify(self, owner)`)
+
+2. **`Self` keyword support** — Added handling for `SelfUpper` token for type references
+
+3. **`config` keyword as expression** — Added handling for `Config` token so `config.fieldName` works in expressions, enabling compile-time configuration access
+
+4. **`default` case in match statements** — Added `Default` keyword to lexer and parser to support `default:` as a wildcard pattern in match statements
+
+5. **`if` expressions** — Added `parse_if_expression()` so `if` can be used in expression context:
+   ```ulissy
+   let x = if condition { a } else { b }
+   ```
+
+6. **`for` statements** — Added full `ForStatement` AST node and `parse_for_statement()` for iteration:
+   ```ulissy
+   for item in collection {
+       process(item)
+   }
+   ```
+
+7. **Assignment expressions** — Added `AssignmentExpr` AST node and assignment parsing so variable reassignments work:
+   ```ulissy
+   var counter = 0
+   counter = counter + 1
+   ```
+
+**Lexer Enhancements:**
+
+1. **Added `Default` keyword token** — For match statement default/wildcard cases
+
+**AST Enhancements:**
+
+1. Added `ForStatement` struct for for-in loops
+2. Added `AssignmentExpr` struct for assignment expressions
+3. Added `ForStatement` variant to `Statement` enum
+4. Added `Assignment` variant to `Expression` enum
+
+**Type Checker Enhancements:**
+
+1. **Two-pass type checking** — Added a first pass to collect all function declarations before checking statements, enabling forward references to functions. This allows functions to call other functions defined later in the file.
 
 ---
 
@@ -88,8 +139,7 @@ ULissy is built on five principles:
 // trajectory.ul - Proof-of-Trajectory Collection
 // Replaces ~250 lines of Rust with ~50 lines of ULissy
 
-import ulissy.spatial
-import ulissy.crypto
+import ulissy.prelude
 
 // Identity declaration - loads from secure keychain
 identity me = Keychain.primary
@@ -327,68 +377,89 @@ const BREADCRUMB_THRESHOLD = 100
 const COLLECTION_INTERVAL = 10.minutes
 ```
 
-### 4.2 Config Blocks (NEW in v0.2)
-
-Module-level configuration with compile-time constants:
+### 4.2 Control Flow
 
 ```ulissy
-config {
-    resolution: 7,
-    interval: 10.minutes,
-    minBreadcrumbsPerEpoch: 100,
-    requireGps: true
+// If statement
+if battery > 20 {
+    collectBreadcrumb()
+} else {
+    enterLowPowerMode()
 }
 
-// Access via config.fieldName
-every config.interval when battery > 20 {
-    let cell = here.h3(config.resolution)
+// If expression (v0.3.1+)
+let status = if connected { "online" } else { "offline" }
+
+// Match statement with default (v0.3.1+)
+match trustLevel {
+    case .anonymous: { denyAccess() }
+    case .verified: { allowBasic() }
+    case .trusted: { allowFull() }
+    default: { denyAccess() }
+}
+
+// For loops (v0.3.1+)
+for breadcrumb in trajectory {
+    verify(breadcrumb)
+}
+
+for i in 0..10 {
+    print(i)
 }
 ```
 
-**Generated Rust:**
-```rust
-mod config {
-    pub const RESOLUTION: i64 = 7;
-    pub const INTERVAL: Duration = Duration::from_mins(10);
-    pub const MIN_BREADCRUMBS_PER_EPOCH: i64 = 100;
-    pub const REQUIRE_GPS: bool = true;
-}
-```
-
-### 4.3 Computed Properties (NEW in v0.2)
-
-Standalone reactive properties that auto-update:
+### 4.3 Assignment (v0.3.1+)
 
 ```ulissy
-// Expression form
-computed total: Int = items.count
+var counter = 0
+counter = counter + 1       // Reassignment
 
-// Object form - constructs a type
-computed status: CollectionStatus {
-    isActive: collection.running,
-    totalCount: me.trajectory.count,
-    pendingCount: me.trajectory.pending,
-    epochCount: me.trajectory.epochs.count
+var total = 0
+for value in values {
+    total = total + value   // Accumulator pattern
 }
 ```
 
-**Generated Rust:**
-```rust
-fn total() -> i64 {
-    items.len()
+### 4.4 Self References (v0.3.1+)
+
+```ulissy
+type Breadcrumb {
+    signature: Signature
+    owner: TIT
+    
+    // 'self' refers to the current instance
+    invariant signature.verify(self, owner)
+    
+    fn hash() -> Hash {
+        return sha256(self.bytes())
+    }
 }
 
-fn status() -> CollectionStatus {
-    CollectionStatus {
-        is_active: collection.running(),
-        total_count: me.trajectory().len(),
-        pending_count: me.trajectory().pending(),
-        epoch_count: me.trajectory().epochs().len(),
+// 'Self' refers to the current type
+impl Breadcrumb {
+    fn genesis() -> Self {
+        return Self { ... }
     }
 }
 ```
 
-### 4.4 Facet Addressing
+### 4.5 Config Access (v0.3.1+)
+
+```ulissy
+config {
+    resolution: 7,
+    minBreadcrumbs: 100
+}
+
+// Access config values in expressions
+let cell = here.h3(config.resolution)
+
+if count >= config.minBreadcrumbs {
+    publishEpoch()
+}
+```
+
+### 4.6 Facet Addressing
 
 GNS facets are first-class syntax:
 
@@ -405,7 +476,7 @@ microsoft@me.authenticate()
 stanford@researcher.verify()
 ```
 
-### 4.5 Temporal Constructs
+### 4.7 Temporal Constructs
 
 ```ulissy
 // Periodic execution
@@ -414,7 +485,7 @@ every 10.minutes {
 }
 
 // Conditional periodic
-every 30.seconds when battery > 20% and connectivity.available {
+every 30.seconds when battery > 20 && connectivity.available {
     sync()
 }
 
@@ -423,485 +494,81 @@ after 5.seconds {
     dismissNotification()
 }
 
-// Condition trigger (reactive)
+// Triggered execution
 when me.trajectory.count >= 100 {
-    notifyHandleReady()
+    print("Ready to claim @handle!")
 }
-```
-
-### 4.6 Optional Chaining and Nil Coalescing
-
-Safe navigation for optional values:
-
-```ulissy
-// Optional chaining - returns nil if any link is nil
-let lastCell = me.trajectory.last?.cell
-
-// Nil coalescing - provide default value
-let hash = me.trajectory.last?.hash ?? "genesis"
-
-// Combined in real usage
-let crumb = breadcrumb(
-    cell: here.h3(7),
-    previous: me.trajectory.last?.hash ?? "genesis"
-).signed(me)
-```
-
-### 4.7 Functions
-
-```ulissy
-// Basic function
-fn collectBreadcrumb() -> Breadcrumb {
-    let cell = here.h3(config.resolution)
-    return breadcrumb(cell: cell, timestamp: now).signed(me)
-}
-
-// With parameters and defaults
-fn collectNow(source: LocationSource = .gps) -> Breadcrumb? {
-    if !gps.available && source == .gps {
-        return nil
-    }
-    return breadcrumb(cell: here.h3(7), source: source).signed(me)
-}
-
-// Async function
-async fn syncWithNetwork() -> Result<SyncStatus, NetworkError> {
-    let response = await network.sync(me.trajectory)
-    return response.status
-}
-
-// With constraints
-fn distance(from a: H3Cell, to b: H3Cell) -> Distance
-    where a.resolution == b.resolution
-{
-    return a.distanceTo(b)
-}
-```
-
-### 4.8 Enums with Associated Types
-
-```ulissy
-// Simple enum
-enum LocationSource { gps, wifi, cell, ip, manual }
-
-// Generic enum
-enum Result<T, E> {
-    ok(T),
-    error(E)
-}
-
-enum Option<T> {
-    some(T),
-    none
-}
-
-// Pattern matching
-match result {
-    case ok(value): {
-        process(value)
-    }
-    case error(e): {
-        log("Error: \(e)")
-    }
-}
-```
-
-### 4.9 Send Statements
-
-Encrypted messaging as a language construct:
-
-```ulissy
-// Direct message (automatically encrypted)
-send to @alice {
-    type: "greeting",
-    message: "Hello!"
-}
-
-// With facet routing
-send to chat@team {
-    content: "Meeting in 5",
-    priority: .high
-}
-
-// Notification on epoch publish
-send to dix@me {
-    type: "epoch_published",
-    epochId: epoch.id,
-    breadcrumbCount: epoch.breadcrumbs.count
-}
-```
-
-### 4.10 Import Statements
-
-```ulissy
-import ulissy.spatial
-import ulissy.crypto
-import ulissy.messaging as msg
-
-// Use imported modules
-let cell = spatial.h3(here, resolution: 7)
-let sig = crypto.sign(data, with: me)
-msg.send(to: @alice, content: "Hello")
 ```
 
 ---
 
-## 5. Compiler Architecture
+## 5. Tooling
 
-### 5.1 Pipeline
-
-```
-Source Code (.ul)
-       │
-       ▼
-┌─────────────┐
-│   LEXER     │  → 63 token types
-│             │  → Handles, facets, interpolation
-└─────────────┘
-       │
-       ▼
-┌─────────────┐
-│   PARSER    │  → 17 statement types
-│             │  → Full expression precedence
-└─────────────┘
-       │
-       ▼
-┌─────────────┐
-│ TYPE CHECK  │  → Domain-specific types
-│             │  → Invariant validation
-└─────────────┘
-       │
-       ▼
-┌─────────────┐
-│  CODEGEN    │  → Rust source code
-│             │  → Cargo.toml
-└─────────────┘
-       │
-       ▼
-Generated Rust Project
-       │
-       ▼
-   cargo build
-       │
-       ▼
-Native Binary / WASM
-```
-
-### 5.2 Lexer Tokens
-
-The lexer recognizes 63 token types:
-
-**Keywords (33):**
-```
-identity  let       var       const     fn        config
-type      struct    enum      trait     impl      computed
-if        else      match     case      guard     invariant
-for       while     in        where     when      every
-after     within    timeout   budget    send      to
-from      as        with      return    throw     throws
-async     await     import    export    public    private
-internal  true      false     nil       self      Self
-```
-
-**Operators (22):**
-```
-+   -   *   /   %   =   ==  !=  <   >   <=  >=
-&&  ||  !   +=  -=  *=  /=  ?   ??  ?.  ..  ..<
-->  =>
-```
-
-**Special:**
-```
-@handle           // @alice
-facet@handle      // dix@alice
-facet@handle/path // home@alice/lights
-10.minutes        // Unit values
-"Hello, \(name)!" // Interpolated strings
-```
-
-### 5.3 AST Node Types
-
-**Statements (17):**
-- `IdentityDecl` - identity declaration
-- `LetDecl` - immutable binding
-- `VarDecl` - mutable binding
-- `ConstDecl` - constant declaration
-- `FnDecl` - function declaration
-- `TypeDecl` - type definition
-- `EnumDecl` - enum definition
-- `ConfigBlock` - module configuration
-- `ComputedPropertyDecl` - computed property
-- `EveryBlock` - periodic execution
-- `WhenBlock` - conditional trigger
-- `AfterBlock` - delayed execution
-- `SendStatement` - encrypted messaging
-- `IfStatement` - conditional
-- `MatchStatement` - pattern matching
-- `ReturnStatement` - return value
-- `ImportStatement` - module import
-
-**Expressions (20+):**
-- Literals (Int, Float, String, Bool, Nil)
-- Identifiers, Handles, FacetAddresses
-- Binary, Unary operations
-- Member access, Optional member (`?.`)
-- Method calls, Optional method calls
-- Nil coalescing (`??`)
-- Object literals, Arrays
-- Interpolated strings
-- Unit values
-
----
-
-## 6. Code Generation
-
-### 6.1 Rust Emission
-
-ULissy generates idiomatic Rust code:
-
-**ULissy:**
-```ulissy
-identity me = Keychain.primary
-
-every 10.minutes when battery > 20 {
-    let crumb = breadcrumb(
-        cell: here.h3(7),
-        previous: me.trajectory.last?.hash ?? "genesis"
-    ).signed(me)
-    
-    me.trajectory.append(crumb)
-}
-```
-
-**Generated Rust:**
-```rust
-// AUTO-GENERATED BY ULISSY COMPILER
-// Do not edit manually
-
-use gns_crypto_core::*;
-
-fn main() -> Result<(), GnsError> {
-    let me = Keychain::primary()?;
-
-    // ULissy: every block - scheduled task
-    gns_runtime::schedule_every(Duration::from_mins(10), move || {
-        if Battery::level() > Percent::from(20) {
-            let crumb = Breadcrumb::new(
-                Location::current().to_h3(7),
-                me.trajectory()
-                    .last_hash()
-                    .map(|b| b.hash.clone())
-                    .unwrap_or_else(|| "genesis".to_string()),
-            ).sign(&me)?;
-            
-            me.trajectory().append(crumb)?;
-        }
-        Ok(())
-    })?;
-
-    Ok(())
-}
-```
-
-### 6.2 Type Mapping
-
-| ULissy Type | Rust Type |
-|-------------|-----------|
-| `Int` | `i64` |
-| `Float` | `f64` |
-| `Bool` | `bool` |
-| `String` | `String` |
-| `Identity` | `Identity` |
-| `PublicKey` | `PublicKey` |
-| `H3Cell` | `H3Cell` |
-| `Duration` | `Duration` |
-| `Moment` | `Moment` |
-| `Hash` | `Hash` |
-| `Breadcrumb` | `Breadcrumb` |
-| `Trajectory` | `Trajectory` |
-| `Array<T>` | `Vec<T>` |
-| `T?` | `Option<T>` |
-
-### 6.3 Generated Cargo.toml
-
-```toml
-[package]
-name = "my-ulissy-app"
-version = "0.1.0"
-edition = "2021"
-
-# AUTO-GENERATED BY ULISSY COMPILER
-# Do not edit manually
-
-[dependencies]
-gns-crypto-core = { path = "../../gns-crypto-core" }
-tokio = { version = "1", features = ["full"] }
-thiserror = "1.0"
-
-# GNS Protocol dependencies
-ed25519-dalek = "2"
-x25519-dalek = "2"
-chacha20poly1305 = "0.10"
-h3o = "0.6"
-sha2 = "0.10"
-hkdf = "0.12"
-```
-
----
-
-## 7. Error Messages
-
-ULissy provides domain-aware error messages:
-
-### 7.1 Type Errors
-
-```
-error[E0201]: type mismatch
-  --> trajectory.ul:15:12
-   |
-15 |     cell: "hello",
-   |           ^^^^^^^ expected H3Cell, found String
-   |
-   = note: use here.h3(resolution) to get an H3Cell
-```
-
-### 7.2 Privacy Errors
-
-```
-error[E0301]: privacy violation
-  --> tracker.ul:8:5
-   |
- 8 |     send(gps.current, to: server)
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = error: cannot transmit raw Coordinates
-   = help: quantize with .h3(resolution) first
-   |
- 8 |     send(gps.current.h3(10), to: server)
-   |                     +++++++
-```
-
-### 7.3 Cryptographic Errors
-
-```
-error[E0401]: unsigned data
-  --> messaging.ul:12:5
-   |
-12 |     me.trajectory.append(crumb)
-   |                          ^^^^^ Breadcrumb requires signature
-   |
-   = help: sign the breadcrumb before appending
-   |
-12 |     me.trajectory.append(crumb.signed(me))
-   |                              ++++++++++++
-```
-
-### 7.4 Protocol Errors
-
-```
-error[E0501]: insufficient breadcrumbs
-  --> claim.ul:5:1
-   |
- 5 | claim @myhandle
-   | ^^^^^^^^^^^^^^^
-   |
-   = error: handle registration requires 100 breadcrumbs
-   = note: current trajectory has 47 breadcrumbs
-   = help: continue collecting breadcrumbs for approximately 9 more hours
-```
-
----
-
-## 8. Tooling
-
-### 8.1 Command Line Interface
-
-The `ulissy` CLI provides a complete development workflow:
+### 5.1 Command Line Interface
 
 ```bash
 # Create new project
 ulissy new my-app
 
-# Compile to Rust
-ulissy build src/main.ul
-ulissy build src/main.ul --output target/rust --name my-app
+# Compile
+ulissy build
+ulissy build --target ios
+ulissy build --release
 
-# Type check without compiling
-ulissy check src/main.ul
+# Run
+ulissy run
 
-# Compile and run
-ulissy run src/main.ul
+# Run specific file
+ulissy run src/trip_tests.ul
 
-# Debug: show lexer tokens
+# Check without compiling
+ulissy check
+
+# Format code
+ulissy fmt
+
+# Run tests
+ulissy test
+
+# Generate documentation
+ulissy doc
+
+# Package for distribution
+ulissy package
+
+# Debug: show tokens
 ulissy lex src/main.ul
 
-# Debug: show parsed AST
+# Debug: show AST
 ulissy parse src/main.ul
-
-# Format source code
-ulissy fmt src/main.ul
-
-# Show compiler info
-ulissy info
 ```
 
-**Installation:**
-
-```bash
-cd ULissy_Program/compiler/ulissy
-cargo build --release
-
-# Install globally
-cargo install --path .
-
-# Now available system-wide
-ulissy --help
-```
-
-**Example output:**
-
-```
-╭─────────────────────────────────────╮
-│  ULissy Compiler v0.2.0             │
-│  A Language for Moving Machines     │
-╰─────────────────────────────────────╯
-
-✓ Parsed 47 tokens
-✓ Built AST with 12 statements  
-✓ Type check passed
-✓ Generated Rust code
-
-Output: target/ulissy/src/main.rs
-        target/ulissy/Cargo.toml
-```
-
-### 8.2 Project Structure
+### 5.2 Project Structure
 
 ```
 my-app/
 ├── ulissy.toml          # Project configuration
 ├── src/
 │   ├── main.ul          # Entry point
-│   ├── trajectory.ul
-│   ├── messaging.ul
-│   └── payments.ul
+│   ├── identity.ul
+│   └── breadcrumbs.ul
 ├── tests/
 │   └── integration.ul
 ├── assets/              # Icons, images
 └── target/              # Build output
-    └── rust/            # Generated Rust code
 ```
 
-### 8.3 Configuration (ulissy.toml)
+### 5.3 Configuration (ulissy.toml)
 
 ```toml
 [package]
 name = "my-app"
 version = "0.1.0"
-authors = ["Camilo <camilo@gns.foundation>"]
+authors = ["Developer <dev@example.com>"]
 
 [dependencies]
 gns-crypto-core = "1.0"
+gns-runtime = "1.0"
 
 [targets]
 default = ["ios", "android"]
@@ -915,124 +582,162 @@ collection-interval = "10m"
 optimize = "size"  # or "speed"
 ```
 
-### 8.4 IDE Support
+### 5.4 IDE Support
 
 - **VS Code Extension**: Syntax highlighting, autocomplete, error diagnostics
-- **Language Server Protocol (LSP)**: Editor-agnostic support
+- **Language Server Protocol (LSP)**: Editor-agnostic support (planned v1.0)
 - **Inline Documentation**: Hover for type information and docs
 
 ---
 
-## 9. Security Model
+## 6. Standard Library Reference
 
-### 9.1 Compile-Time Guarantees
+```ulissy
+// Import everything
+import ulissy.prelude
 
-The type system prevents entire classes of vulnerabilities:
+// Identity
+identity me = Keychain.primary
+identity work = Keychain.facet("company")
 
-| Vulnerability | Prevention |
-|---------------|------------|
-| Unsigned data | `Breadcrumb` type requires `signature` field |
-| Privacy leaks | `Coordinates` type cannot be serialized/transmitted |
-| Key exposure | `PrivateKey` cannot leave secure enclave |
-| Replay attacks | `Nonce` type enforced in `Envelope` |
-| Chain breaks | `previous` hash validated at compile time |
+// Location
+let cell = here.h3(7)                    // Current H3 cell
+let dist = 500.meters                    // Distance
+let nearby = neighbors(cell1, cell2)     // Adjacency check
 
-### 9.2 Runtime Guarantees
+// Time
+let timestamp = now                      // Current moment
+let delay = 10.minutes                   // Duration
+let future = now.plus(1.hours)           // Arithmetic
 
-- All cryptographic operations use gns-crypto-core (audited Rust)
-- Private keys bound to hardware secure enclave
-- No plaintext sensitive data in memory longer than necessary
-- Automatic zeroization of secrets
+// Crypto
+let hash = sha256(data)                  // Hashing
+let sig = me.sign(data)                  // Signing
+let valid = sig.verify(data, key)        // Verification
 
-### 9.3 What ULissy Cannot Prevent
+// Sensors
+if battery > 20 { ... }                  // Battery level
+if gps.available { ... }                 // GPS state
+let digest = sensors.digest              // Sensor context
 
-- Physical device compromise
-- Side-channel attacks on hardware
-- Social engineering
-- Bugs in gns-crypto-core itself
+// Trajectory
+let crumb = breadcrumb(cell: cell).signed(me)
+me.trajectory.append(crumb)
+let epoch = me.trajectory.bundleEpoch()
 
----
-
-## 10. Relationship to GNS Protocol
-
-ULissy is the **native language** for GNS Protocol development:
-
-| GNS Concept | ULissy Construct |
-|-------------|------------------|
-| Ed25519 identity | `identity` declaration |
-| Breadcrumb chain | `Trajectory` type, `breadcrumb()` function |
-| H3 quantization | `here.h3(resolution)` |
-| Protocol facets | `dix@`, `home@`, `pay@` syntax |
-| Organization facets | `org@` prefix |
-| GeoAuth | `geoauth` block |
-| Encrypted envelope | Implicit in `send to` |
-| GnsRecord | `record` type |
-| IDUP payments | `pay@` facet operations |
-| Module config | `config { }` block |
-
-ULissy makes GNS protocol compliance automatic. A program that compiles is a program that follows the protocol.
+// Network
+network.publish(epoch)
+network.sync()
+let record = lookupHandle(@alice)
+```
 
 ---
 
-## 11. Implementation Status
+## 7. Compiler Architecture
 
-### Completed (v0.2.0)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     ULissy Compiler Pipeline                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Source (.ul)                                                   │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────┐                                                │
+│  │   Lexer     │  64 token types                                │
+│  │             │  Handles, facets, units                        │
+│  └─────────────┘                                                │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────┐                                                │
+│  │   Parser    │  18 statement types                            │
+│  │             │  Full expression support                       │
+│  │             │  self/Self/config (v0.3.1)                     │
+│  └─────────────┘                                                │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────┐                                                │
+│  │ Type Check  │  Two-pass resolution (v0.3.1)                  │
+│  │             │  Domain-specific types                         │
+│  │             │  Constraint validation                         │
+│  └─────────────┘                                                │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────┐                                                │
+│  │  Codegen    │  Rust emission                                 │
+│  │             │  Cargo.toml generation                         │
+│  └─────────────┘                                                │
+│       │                                                         │
+│       ▼                                                         │
+│  Generated Rust → cargo build → Native Binary                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
+---
+
+## 8. Roadmap
+
+### Completed (v0.3.1) ✅
+
+#### Compiler
 - ✅ Formal EBNF grammar specification
-- ✅ Lexer implementation in Rust (63 token types)
-- ✅ Parser implementation in Rust (17 statement types)
+- ✅ Lexer implementation in Rust (64 token types)
+- ✅ Parser implementation in Rust (18 statement types)
 - ✅ AST with full expression support
-- ✅ Type checker with domain-specific types
+- ✅ `self` and `Self` keyword support
+- ✅ `config` access in expressions
+- ✅ `default` case in match statements
+- ✅ `if` expressions
+- ✅ `for` loops
+- ✅ Assignment expressions
+- ✅ Type checker with two-pass function resolution
 - ✅ Code generator (Rust emission)
-- ✅ `config { }` blocks
-- ✅ Standalone `computed` properties
-- ✅ Optional chaining (`?.`) and nil coalescing (`??`)
-- ✅ Interpolated strings
 - ✅ Cargo.toml generation
 - ✅ CLI tool (`ulissy` command with 8 subcommands)
 
-### In Progress
+#### Runtime (`gns-runtime`)
+- ✅ Duration module (time spans with units)
+- ✅ Moment module (instants in time)
+- ✅ Distance module (lengths with units)
+- ✅ Percent module (percentage values)
+- ✅ Location module (GPS, H3 cells)
+- ✅ Battery module (power state, modes)
+- ✅ Sensors module (device sensors, context digest)
+- ✅ Scheduling module (every, when, after blocks)
+- ✅ Network module (publish, sync)
 
-- 🔄 Standard library modules
-- 🔄 gns-runtime crate
-- 🔄 VS Code extension
+#### Standard Library
+- ✅ `ulissy.core` - Fundamental types
+- ✅ `ulissy.spatial` - Location & H3
+- ✅ `ulissy.crypto` - Cryptography
+- ✅ `ulissy.temporal` - Time & duration
+- ✅ `ulissy.sensors` - Device sensors
+- ✅ `ulissy.trajectory` - Proof-of-Trajectory
+- ✅ `ulissy.messaging` - Encrypted messaging
+- ✅ `ulissy.network` - Network operations
+- ✅ `ulissy.prelude` - All-in-one import
 
-### Planned
+#### Developer Tools
+- ✅ VS Code extension with syntax highlighting
+- ✅ 40+ code snippets
+- ✅ Build/Check/Run commands
+- ✅ Real-time diagnostics
+- ✅ Custom file icon
 
+### Planned (v1.0)
+
+- ⏳ Language Server Protocol (LSP) - full IDE integration
+- ⏳ Go to definition, find references
+- ⏳ Debugger integration
 - ⏳ Documentation generator
 - ⏳ Package manager
+- ⏳ Mobile platform integration (iOS/Android)
 - ⏳ Self-hosting (compiler written in ULissy)
 
 ---
 
-## 12. Future Directions
-
-### 12.1 Potential Extensions
-
-- **Formal verification**: Prove protocol compliance mathematically
-- **GPU support**: Parallel spatial computations
-- **Mesh networking**: First-class peer-to-peer constructs
-- **Machine learning**: On-device inference primitives
-- **Robotics**: Motor control, sensor fusion
-
-### 12.2 Ecosystem Vision
-
-```
-2025 Q1 (NOW)         2025 Q2               2025 Q3+
-  │                     │                     │
-  ▼                     ▼                     ▼
-
-ULissy 0.2 ✅         ULissy 1.0            ULissy Ecosystem
-- Compiler complete   - Production ready    - Package registry
-- CLI tool complete   - Full GNS support    - Framework ecosystem
-- Code generation     - gns-runtime         - Enterprise adoption
-- Type system         - VS Code extension   - Industry standard
-                      - Standard library    - Self-hosting
-```
-
----
-
-## 13. Conclusion
+## 9. Conclusion
 
 ULissy represents a new category of programming language—one designed for the physical world rather than abstract computation. By treating space, time, identity, and movement as fundamental rather than incidental, ULissy makes secure, privacy-preserving, spatially-aware applications natural to write.
 
@@ -1040,7 +745,8 @@ Combined with the GNS Protocol, ULissy provides the complete stack for identity-
 
 - **GNS**: The protocol (what)
 - **ULissy**: The language (how)
-- **gns-crypto-core**: The foundation (implementation)
+- **gns-runtime**: The runtime (execution)
+- **gns-crypto-core**: The foundation (security)
 - **Tauri**: The delivery (platforms)
 
 The era of moving machines requires a language that moves with them.
@@ -1058,6 +764,7 @@ after       within      timeout     budget      send        to
 from        as          with        return      throw       throws
 async       await       import      export      public      private
 internal    true        false       nil         self        Self
+default
 ```
 
 ## Appendix B: Operators
@@ -1141,13 +848,14 @@ pay@merchant
 | After | `after delay { }` | `after 5.seconds { }` |
 | Send | `send to recipient { }` | `send to @alice { msg: "hi" }` |
 | If | `if cond { } else { }` | `if x > 0 { } else { }` |
-| Match | `match expr { cases }` | `match status { case ok: { } }` |
+| Match | `match expr { cases }` | `match status { case ok: { } default: { } }` |
+| For | `for item in collection { }` | `for bc in trajectory { }` |
 | Return | `return expr` | `return result` |
 | Import | `import path` | `import ulissy.spatial` |
 
 ---
 
-**Document Version**: 0.2.0
+**Document Version**: 0.3.1
 **Last Updated**: January 2025
 **Authors**: GNS Foundation
 **License**: MIT

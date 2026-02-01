@@ -1,0 +1,351 @@
+
+╭─────────────────────────────────────╮
+│  ULissy Compiler v0.1.0             │
+│  A Language for Moving Machines     │
+╰─────────────────────────────────────╯
+
+Running examples/trip-protocol/src/trip_tests.ul
+
+DEBUG: TypeDecl TIT field data resolved to Named("Bytes")
+DEBUG: TypeDecl Breadcrumb field owner resolved to Named("TIT")
+DEBUG: TypeDecl Breadcrumb field index resolved to Int
+DEBUG: TypeDecl Breadcrumb field timestamp resolved to Moment
+DEBUG: TypeDecl Breadcrumb field cell resolved to H3Cell
+DEBUG: TypeDecl Breadcrumb field context resolved to Hash
+DEBUG: TypeDecl Breadcrumb field previousHash resolved to Hash
+DEBUG: TypeDecl Breadcrumb field signature resolved to Signature
+DEBUG: TypeDecl Epoch field id resolved to String
+DEBUG: TypeDecl Epoch field owner resolved to Named("TIT")
+DEBUG: TypeDecl Epoch field count resolved to Int
+DEBUG: TypeDecl Epoch field merkleRoot resolved to Hash
+DEBUG: TypeDecl Epoch field startIndex resolved to Int
+DEBUG: TypeDecl Epoch field endIndex resolved to Int
+DEBUG: TypeDecl Epoch field startTime resolved to Moment
+DEBUG: TypeDecl Epoch field endTime resolved to Moment
+DEBUG: TypeDecl Epoch field signature resolved to Signature
+DEBUG: TypeDecl ProximityProof field witness resolved to Named("TIT")
+DEBUG: TypeDecl ProximityProof field subject resolved to Named("TIT")
+DEBUG: TypeDecl ProximityProof field timestamp resolved to Moment
+DEBUG: TypeDecl ProximityProof field location resolved to H3Cell
+DEBUG: TypeDecl ProximityProof field proximityType resolved to Named("ProximityType")
+DEBUG: TypeDecl ProximityProof field signalStrength resolved to Int
+DEBUG: TypeDecl ProximityProof field signature resolved to Signature
+DEBUG: TypeDecl TrustScore field baseScore resolved to Float
+DEBUG: TypeDecl TrustScore field peerMultiplier resolved to Float
+DEBUG: TypeDecl TrustScore field anchorMultiplier resolved to Float
+DEBUG: TypeDecl TrustScore field decayFactor resolved to Float
+DEBUG: TypeDecl TrustScore field total resolved to Float
+  ✓ Compiled to Rust
+  → Running cargo build...
+
+warning: unused imports: `Signature as Ed25519Signature`, `Verifier`, and `VerifyingKey`
+ --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/identity.rs:5:33
+  |
+5 | use ed25519_dalek::{SigningKey, VerifyingKey, Signature as Ed25519Signature, Signer, Verifier};
+  |                                 ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^          ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Hash`
+ --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/identity.rs:9:42
+  |
+9 | use crate::{RuntimeResult, RuntimeError, Hash, Signature, PublicKey};
+  |                                          ^^^^
+
+warning: unused import: `identity::*`
+  --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/lib.rs:13:9
+   |
+13 | pub use identity::*;
+   |         ^^^^^^^^^^^
+
+warning: unused import: `breadcrumb::*`
+  --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/lib.rs:14:9
+   |
+14 | pub use breadcrumb::*;
+   |         ^^^^^^^^^^^^^
+
+warning: unused variable: `duration`
+   --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/types.rs:415:53
+    |
+415 | pub async fn schedule_every<F: std::future::Future>(duration: Duration, f: impl Fn() -> F) {
+    |                                                     ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_duration`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `f`
+   --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/types.rs:415:73
+    |
+415 | pub async fn schedule_every<F: std::future::Future>(duration: Duration, f: impl Fn() -> F) {
+    |                                                                         ^ help: if this is intentional, prefix it with an underscore: `_f`
+
+warning: unused variable: `condition`
+   --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/types.rs:419:69
+    |
+419 | pub async fn watch_condition<F: std::future::Future<Output = bool>>(condition: impl Fn() -> F) {
+    |                                                                     ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_condition`
+
+warning: unused variable: `recipient`
+   --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/types.rs:451:29
+    |
+451 | pub async fn send_encrypted(recipient: FacetAddress, message: Message) -> RuntimeResult<()> {
+    |                             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_recipient`
+
+warning: unused variable: `message`
+   --> /Users/camiloayerbeposada/ULissy_Program/gns-runtime/src/types.rs:451:54
+    |
+451 | pub async fn send_encrypted(recipient: FacetAddress, message: Message) -> RuntimeResult<()> {
+    |                                                      ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_message`
+
+warning: `gns-runtime` (lib) generated 9 warnings (run `cargo fix --lib -p gns-runtime` to apply 9 suggestions)
+   Compiling trip_tests v0.1.0 (/Users/camiloayerbeposada/ULissy_Program/target/ulissy/run)
+error[E0252]: the name `Identity` is defined multiple times
+  --> src/main.rs:34:5
+   |
+19 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |     -------- previous import of the type `Identity` here
+...
+34 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |     ^^^^^^^^--
+   |     |
+   |     `Identity` reimported here
+   |     help: remove unnecessary import
+   |
+   = note: `Identity` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `Keychain` is defined multiple times
+  --> src/main.rs:34:15
+   |
+19 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |               -------- previous import of the type `Keychain` here
+...
+34 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |               ^^^^^^^^--
+   |               |
+   |               `Keychain` reimported here
+   |               help: remove unnecessary import
+   |
+   = note: `Keychain` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `PublicKey` is defined multiple times
+  --> src/main.rs:34:25
+   |
+19 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                         --------- previous import of the type `PublicKey` here
+...
+34 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                         ^^^^^^^^^--
+   |                         |
+   |                         `PublicKey` reimported here
+   |                         help: remove unnecessary import
+   |
+   = note: `PublicKey` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `Signature` is defined multiple times
+  --> src/main.rs:34:36
+   |
+19 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                                    --------- previous import of the type `Signature` here
+...
+34 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                                    ^^^^^^^^^--
+   |                                    |
+   |                                    `Signature` reimported here
+   |                                    help: remove unnecessary import
+   |
+   = note: `Signature` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `Hash` is defined multiple times
+  --> src/main.rs:34:47
+   |
+19 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                                               ---- previous import of the type `Hash` here
+...
+34 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                                               ^^^^--
+   |                                               |
+   |                                               `Hash` reimported here
+   |                                               help: remove unnecessary import
+   |
+   = note: `Hash` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `Bytes` is defined multiple times
+  --> src/main.rs:34:53
+   |
+19 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                                                     ----- previous import of the type `Bytes` here
+...
+34 |     Identity, Keychain, PublicKey, Signature, Hash, Bytes,
+   |                                                     ^^^^^-
+   |                                                     |
+   |                                                     `Bytes` reimported here
+   |                                                     help: remove unnecessary import
+   |
+   = note: `Bytes` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `Sensors` is defined multiple times
+  --> src/main.rs:35:29
+   |
+15 |     Battery, BatteryLevel, Sensors,
+   |                            ------- previous import of the type `Sensors` here
+...
+35 |     TIT, Breadcrumb, Epoch, Sensors, Location, GnsError
+   |                             ^^^^^^^--
+   |                             |
+   |                             `Sensors` reimported here
+   |                             help: remove unnecessary import
+   |
+   = note: `Sensors` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `Location` is defined multiple times
+  --> src/main.rs:35:38
+   |
+14 |     Location, Coordinates, H3Cell,
+   |     -------- previous import of the type `Location` here
+...
+35 |     TIT, Breadcrumb, Epoch, Sensors, Location, GnsError
+   |                                      ^^^^^^^^--
+   |                                      |
+   |                                      `Location` reimported here
+   |                                      help: remove unnecessary import
+   |
+   = note: `Location` must be defined only once in the type namespace of this module
+
+error[E0252]: the name `GnsError` is defined multiple times
+  --> src/main.rs:35:48
+   |
+31 |     GnsError,
+   |     -------- previous import of the type `GnsError` here
+...
+35 |     TIT, Breadcrumb, Epoch, Sensors, Location, GnsError
+   |                                                ^^^^^^^^
+   |                                                |
+   |                                                `GnsError` reimported here
+   |                                                help: remove unnecessary import
+   |
+   = note: `GnsError` must be defined only once in the type namespace of this module
+
+error[E0308]: mismatched types
+   --> src/main.rs:182:78
+    |
+182 |   async fn computeTIT(publicKey: PublicKey) -> gns_runtime::RuntimeResult<TIT> {
+    |  ______________________________________________________________________________^
+183 | | }
+    | |_^ expected `Result<TIT, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<TIT, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:185:86
+    |
+185 |   async fn trustLevelFromEpochs(epochs: i64) -> gns_runtime::RuntimeResult<TrustLevel> {
+    |  ______________________________________________________________________________________^
+186 | | }
+    | |_^ expected `Result<TrustLevel, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<TrustLevel, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:188:73
+    |
+188 |   async fn canSend(level: TrustLevel) -> gns_runtime::RuntimeResult<bool> {
+    |  _________________________________________________________________________^
+189 | | }
+    | |_^ expected `Result<bool, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<bool, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:191:80
+    |
+191 |   async fn canClaimHandle(level: TrustLevel) -> gns_runtime::RuntimeResult<bool> {
+    |  ________________________________________________________________________________^
+192 | | }
+    | |_^ expected `Result<bool, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<bool, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:194:74
+    |
+194 |   async fn canVouch(level: TrustLevel) -> gns_runtime::RuntimeResult<bool> {
+    |  __________________________________________________________________________^
+195 | | }
+    | |_^ expected `Result<bool, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<bool, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:197:169
+    |
+197 |   async fn computeTrustScore(epochs: i64, peerAttestations: i64, anchorAttestations: i64, secondsSinceActivity: f64, tau0: f64) -> gns_runtime::RuntimeResult<TrustScore> {
+    |  _________________________________________________________________________________________________________________________________________________________________________^
+198 | | }
+    | |_^ expected `Result<TrustScore, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<TrustScore, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:200:105
+    |
+200 |   async fn trustDecayAfterDays(initial: f64, days: f64, tau0Days: f64) -> gns_runtime::RuntimeResult<f64> {
+    |  _________________________________________________________________________________________________________^
+201 | | }
+    | |_^ expected `Result<f64, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<f64, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:203:78
+    |
+203 |   async fn maxSpeed(entityType: EntityType) -> gns_runtime::RuntimeResult<f64> {
+    |  ______________________________________________________________________________^
+204 | | }
+    | |_^ expected `Result<f64, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<f64, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:206:74
+    |
+206 |   async fn isValidHandle(name: String) -> gns_runtime::RuntimeResult<bool> {
+    |  __________________________________________________________________________^
+207 | | }
+    | |_^ expected `Result<bool, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<bool, RuntimeError>`
+            found unit type `()`
+
+error[E0308]: mismatched types
+   --> src/main.rs:209:82
+    |
+209 |   async fn checkCharsSafely(s: String, i: i64) -> gns_runtime::RuntimeResult<bool> {
+    |  __________________________________________________________________________________^
+210 | | }
+    | |_^ expected `Result<bool, RuntimeError>`, found `()`
+    |
+    = note:   expected enum `Result<bool, RuntimeError>`
+            found unit type `()`
+
+error[E0282]: type annotations needed
+   --> src/main.rs:306:5
+    |
+306 |     None;
+    |     ^^^^ cannot infer type of the type parameter `T` declared on the enum `Option`
+    |
+help: consider specifying the generic argument
+    |
+306 |     None::<T>;
+    |         +++++
+
+Some errors have detailed explanations: E0252, E0282, E0308.
+For more information about an error, try `rustc --explain E0252`.
+error: could not compile `trip_tests` (bin "trip_tests") due to 20 previous errors
+error: Cargo build failed

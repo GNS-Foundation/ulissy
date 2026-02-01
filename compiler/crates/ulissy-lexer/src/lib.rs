@@ -61,6 +61,7 @@ pub enum TokenKind {
     Computed,       // computed
     Invariant,      // invariant
     Config,         // config
+    Default,        // default
 
     // === LITERALS ===
     IntLiteral(i64),
@@ -565,6 +566,7 @@ impl<'a> Lexer<'a> {
             "computed" => TokenKind::Computed,
             "invariant" => TokenKind::Invariant,
             "config" => TokenKind::Config,
+            "default" => TokenKind::Default,
             _ => TokenKind::Identifier(ident),
         };
 

@@ -46,6 +46,11 @@ pub enum RuntimeError {
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
 impl RuntimeError {
+    /// Create a generic error with a message
+    pub fn new(msg: impl Into<String>) -> Self {
+        RuntimeError::Internal(msg.into())
+    }
+    
     /// Create a location unavailable error
     pub fn location(msg: impl Into<String>) -> Self {
         RuntimeError::LocationUnavailable(msg.into())
@@ -54,6 +59,11 @@ impl RuntimeError {
     /// Create a network error
     pub fn network(msg: impl Into<String>) -> Self {
         RuntimeError::NetworkError(msg.into())
+    }
+    
+    /// Create a crypto error
+    pub fn crypto(msg: impl Into<String>) -> Self {
+        RuntimeError::CryptoError(msg.into())
     }
     
     /// Create an internal error

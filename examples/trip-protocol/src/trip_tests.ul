@@ -1,0 +1,672 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// TRIP Protocol Test Suite
+// Written in ULissy v0.3.0
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// "A language for moving machines testing a protocol for moving identities"
+//
+// Run with: ulissy run trip_tests.ul
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+import ulissy.prelude
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP Protocol Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+config {
+    protocolVersion: 1,
+    parisiK: 7,
+    tau0Human: 2592000,
+    tau0Drone: 864000,
+    minBreadcrumbs: 100,
+    h3Resolution: 7
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Trust levels - earned through trajectory
+enum TrustLevel { anonymous, verified, established, trusted, vouched }
+
+// Entity types with different speed limits and decay rates
+enum EntityType { human, drone, vehicle, robot, iot, anchor }
+
+// Proximity detection methods
+enum ProximityType { bluetooth, wifiDirect, nfc, dsrc, uwb }
+
+// TIT - Trajectory Identity Tag (128-bit)
+type TIT {
+    data: Bytes
+    
+    invariant data.length == 16
+}
+
+// Breadcrumb - signed location proof
+type Breadcrumb {
+    owner: TIT
+    index: Uint64
+    timestamp: Moment
+    cell: H3Cell
+    context: Hash
+    previousHash: Hash
+    signature: Signature
+    
+    invariant timestamp <= now
+    invariant signature.verify(self, owner)
+}
+
+// Epoch - aggregated trajectory proof
+type Epoch {
+    id: String
+    owner: TIT
+    count: Uint32
+    merkleRoot: Hash
+    startIndex: Uint64
+    endIndex: Uint64
+    startTime: Moment
+    endTime: Moment
+    signature: Signature
+    
+    invariant count >= config.minBreadcrumbs
+    invariant endIndex > startIndex
+    invariant endTime > startTime
+}
+
+// Proximity proof for peer attestation
+type ProximityProof {
+    witness: TIT
+    subject: TIT
+    timestamp: Moment
+    location: H3Cell
+    proximityType: ProximityType
+    signalStrength: Int8
+    signature: Signature
+}
+
+// Trust score using Parisi dynamics
+type TrustScore {
+    baseScore: Float
+    peerMultiplier: Float
+    anchorMultiplier: Float
+    decayFactor: Float
+    total: Float
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Compute TIT from public key: SHA-256(pubkey)[0:16]
+fn computeTIT(publicKey: PublicKey) -> TIT {
+    let hash = sha256(publicKey)
+    return { data: hash.slice(0, 16) } as TIT
+}
+
+// Get trust level from epoch count
+fn trustLevelFromEpochs(epochs: Uint64) -> TrustLevel {
+    if epochs == 0 {
+        return .anonymous
+    }
+    if epochs < 10 {
+        return .verified
+    }
+    if epochs < 100 {
+        return .established
+    }
+    return .trusted
+}
+
+// Check trust permissions
+fn canSend(level: TrustLevel) -> Bool {
+    return level != .anonymous
+}
+
+fn canClaimHandle(level: TrustLevel) -> Bool {
+    match level {
+        case anonymous: { return false }
+        case verified: { return false }
+        case established: { return true }
+        case trusted: { return true }
+        case vouched: { return true }
+    }
+}
+
+fn canVouch(level: TrustLevel) -> Bool {
+    match level {
+        case trusted: { return true }
+        case vouched: { return true }
+        default: { return false }
+    }
+}
+
+// Compute trust score using Parisi dynamics
+fn computeTrustScore(
+    epochs: Uint64,
+    peerAttestations: Uint32,
+    anchorAttestations: Uint32,
+    secondsSinceActivity: Float,
+    tau0: Float
+) -> TrustScore {
+    // Base score: log2(1 + epochs)
+    let baseScore = log2(1.0 + epochs)
+    
+    // Peer multiplier: 1 + tanh(peers / k)
+    let peerMultiplier = 1.0 + tanh(peerAttestations / config.parisiK)
+    
+    // Anchor multiplier: 1 + tanh(anchors / 3)
+    let anchorMultiplier = 1.0 + tanh(anchorAttestations / 3.0)
+    
+    // Decay factor
+    let gamma = 0.03
+    let lambda = 1.0 - exp(-secondsSinceActivity / tau0)
+    let decayFactor = exp(-gamma * lambda * secondsSinceActivity / 86400.0)
+    
+    // Total
+    let total = baseScore * peerMultiplier * anchorMultiplier * decayFactor
+    
+    return {
+        baseScore: baseScore,
+        peerMultiplier: peerMultiplier,
+        anchorMultiplier: anchorMultiplier,
+        decayFactor: decayFactor,
+        total: total
+    } as TrustScore
+}
+
+// Trust decay after inactivity
+fn trustDecayAfterDays(initial: Float, days: Float, tau0Days: Float) -> Float {
+    let lambda = 1.0 - exp(-days / tau0Days)
+    let gamma = 0.03
+    return initial * exp(-gamma * lambda * days)
+}
+
+// Entity max speed (km/h)
+fn maxSpeed(entityType: EntityType) -> Float {
+    match entityType {
+        case human: { return 50.0 }
+        case drone: { return 200.0 }
+        case vehicle: { return 300.0 }
+        case robot: { return 30.0 }
+        case iot: { return 0.1 }
+        case anchor: { return 0.0 }
+    }
+}
+
+// Validate handle format
+fn isValidHandle(name: String) -> Bool {
+    // Strip @ if present
+    let clean: String = if name.startsWith("@") {
+        name.slice(1)
+    } else {
+        name
+    }
+    
+    // Check length
+    if clean.length < 1 || clean.length > 20 {
+        return false
+    }
+    
+    // Check first character (not underscore or digit)
+    let first = clean.charAt(0)
+    if first == "_" || first.isDigit() {
+        return false
+    }
+    
+    // Check all characters (lowercase, digit, underscore only)
+    // Check all characters (lowercase, digit, underscore only)
+    return checkCharsSafely(clean, 0)
+}
+
+fn checkCharsSafely(s: String, i: Int) -> Bool {
+    if i >= s.length {
+        return true
+    }
+    let char = s.charAt(i)
+    if !char.isLowercase() && !char.isDigit() && char != "_" {
+        return false
+    }
+    return checkCharsSafely(s, i + 1)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test Infrastructure
+// ─────────────────────────────────────────────────────────────────────────────
+
+var testsRun = 0
+var testsPassed = 0
+var testsFailed = 0
+
+fn test(name: String, passed: Bool) {
+    testsRun = testsRun + 1
+    if passed {
+        testsPassed = testsPassed + 1
+        print("✓ \(name)")
+    } else {
+        testsFailed = testsFailed + 1
+        print("✗ \(name) FAILED")
+    }
+}
+
+fn assertEqualString(actual: String, expected: String, name: String) {
+    test(name, actual == expected)
+}
+
+fn assertEqualInt(actual: Int, expected: Int, name: String) {
+    test(name, actual == expected)
+}
+
+fn assertEqualFloat(actual: Float, expected: Float, name: String) {
+    test(name, actual == expected)
+}
+
+fn assertEqualTrustLevel(actual: TrustLevel, expected: TrustLevel, name: String) {
+    test(name, actual == expected)
+}
+
+fn assertTrue(condition: Bool, name: String) {
+    test(name, condition)
+}
+
+fn assertFalse(condition: Bool, name: String) {
+    test(name, !condition)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST SUITE
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn runAllTests() {
+    print("")
+    print("╔═══════════════════════════════════════════════════════════════╗")
+    print("║                                                               ║")
+    print("║   TRIP Protocol Test Suite                                    ║")
+    print("║   Written in ULissy v0.3.0                                    ║")
+    print("║   \"A language for moving machines\"                            ║")
+    print("║                                                               ║")
+    print("╚═══════════════════════════════════════════════════════════════╝")
+    print("")
+    
+    testTITVectors()
+    testIdentityGeneration()
+    testSignAndVerify()
+    testFacetDerivation()
+    testHandleValidation()
+    testBreadcrumbGenesis()
+    testBreadcrumbChain()
+    testTrustLevelsFromEpochs()
+    testTrustPermissions()
+    testTrustScoreComputation()
+    testTrustDecay()
+    testParisiConstants()
+    testEntitySpeeds()
+    testCompleteLifecycle()
+    
+    print("")
+    print("═══════════════════════════════════════════════════════════════")
+    print("Results: \(testsPassed)/\(testsRun) passed")
+    if testsFailed == 0 {
+        print("All tests passed! ✓")
+    } else {
+        print("\(testsFailed) tests FAILED")
+    }
+    print("═══════════════════════════════════════════════════════════════")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Individual Tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn testTITVectors() {
+    print("")
+    print("── TIT Test Vectors ──")
+    
+    // Test vector 1: All-zeros public key
+    // SHA-256(0x00 * 32)[0:16] = 66687aadf862bd776c8fc18b8e9f8e20
+    let zerosKey: Bytes = Bytes.zeros(32)
+    let titZeros = sha256(zerosKey).slice(0, 16).toHex()
+    assertEqualString(titZeros, "66687aadf862bd776c8fc18b8e9f8e20", "TIT zeros key")
+    
+    // Test vector 2: All-ones public key
+    // SHA-256(0xFF * 32)[0:16] = af9613760f72635fbdb44a5a0a63c39f
+    let onesKey: Bytes = Bytes.fill(32, 0xFF)
+    let titOnes = sha256(onesKey).slice(0, 16).toHex()
+    assertEqualString(titOnes, "af9613760f72635fbdb44a5a0a63c39f", "TIT ones key")
+    
+    // Test vector 3: Sequential bytes
+    // SHA-256(0x00..0x1F)[0:16] = 630dcd2966c4336691125448bbb25b4f
+    let seqKey: Bytes = Bytes.sequence(0, 32)
+    let titSeq = sha256(seqKey).slice(0, 16).toHex()
+    assertEqualString(titSeq, "630dcd2966c4336691125448bbb25b4f", "TIT sequential key")
+}
+
+fn testIdentityGeneration() {
+    print("")
+    print("── Identity Generation ──")
+    
+    identity me = Keychain.primary
+    
+    assertTrue(me.publicKey.length == 32, "Public key is 32 bytes")
+    
+    let tit = computeTIT(me.publicKey)
+    assertTrue(tit.data.length == 16, "TIT is 16 bytes")
+    
+    let stellar = me.stellarAddress
+    assertTrue(stellar.startsWith("G"), "Stellar address starts with G")
+    assertTrue(stellar.length == 56, "Stellar address is 56 chars")
+}
+
+fn testSignAndVerify() {
+    print("")
+    print("── Sign and Verify ──")
+    
+    identity me = Keychain.primary
+    let message = "Hello, TRIP!"
+    
+    let signature = me.sign(message)
+    assertTrue(signature.length == 64, "Signature is 64 bytes")
+    
+    let valid = signature.verify(message, me.publicKey)
+    assertTrue(valid, "Signature verifies correctly")
+    
+    let invalidMsg = signature.verify("Wrong message", me.publicKey)
+    assertFalse(invalidMsg, "Wrong message fails verification")
+    
+    identity other = Keychain.facet("other")
+    let invalidKey = signature.verify(message, other.publicKey)
+    assertFalse(invalidKey, "Wrong key fails verification")
+}
+
+fn testFacetDerivation() {
+    print("")
+    print("── Facet Derivation ──")
+    
+    identity root = Keychain.primary
+    identity work = Keychain.facet("work")
+    identity personal = Keychain.facet("personal")
+    identity drone = Keychain.facet("drone")
+    
+    // All should be different
+    assertTrue(root.publicKey != work.publicKey, "Root != work")
+    assertTrue(root.publicKey != personal.publicKey, "Root != personal")
+    assertTrue(work.publicKey != personal.publicKey, "Work != personal")
+    assertTrue(work.publicKey != drone.publicKey, "Work != drone")
+    
+    // Same facet name = same key (deterministic)
+    identity work2 = Keychain.facet("work")
+    assertTrue(work.publicKey == work2.publicKey, "Same facet = same key")
+}
+
+fn testHandleValidation() {
+    print("")
+    print("── Handle Validation ──")
+    
+    // Valid handles
+    assertTrue(isValidHandle("alice"), "alice is valid")
+    assertTrue(isValidHandle("@bob"), "@bob is valid")
+    assertTrue(isValidHandle("drone_42"), "drone_42 is valid")
+    assertTrue(isValidHandle("x"), "x is valid (min length)")
+    assertTrue(isValidHandle("abcdefghij1234567890"), "20 chars is valid (max)")
+    
+    // Invalid handles
+    assertFalse(isValidHandle(""), "empty is invalid")
+    assertFalse(isValidHandle("UPPERCASE"), "UPPERCASE is invalid")
+    assertFalse(isValidHandle("_start"), "_start is invalid")
+    assertFalse(isValidHandle("123start"), "123start is invalid")
+    assertFalse(isValidHandle("has space"), "has space is invalid")
+    assertFalse(isValidHandle("special!"), "special! is invalid")
+    assertFalse(isValidHandle("abcdefghij12345678901"), "21 chars is invalid")
+}
+
+fn testBreadcrumbGenesis() {
+    print("")
+    print("── Breadcrumb Genesis ──")
+    
+    identity me = Keychain.primary
+    let cell = here.h3(config.h3Resolution)
+    
+    let bc = breadcrumb(
+        cell: cell,
+        context: sensors.digest,
+        previous: nil
+    ).signed(me)
+    
+    assertTrue(bc.index == 0, "Genesis index is 0")
+    assertTrue(bc.previousHash == Bytes.zeros(32), "Genesis has no previous")
+    assertTrue(bc.signature.verify(bc, me.publicKey), "Signature is valid")
+}
+
+fn testBreadcrumbChain() {
+    print("")
+    print("── Breadcrumb Chain ──")
+    
+    identity me = Keychain.primary
+    let cell = here.h3(config.h3Resolution)
+    
+    // Genesis
+    let bc0 = breadcrumb(
+        cell: cell,
+        context: sensors.digest,
+        previous: nil
+    ).signed(me)
+    
+    // Second breadcrumb
+    after 10.milliseconds {
+        let bc1 = breadcrumb(
+            cell: cell,
+            context: sensors.digest,
+            previous: bc0
+        ).signed(me)
+        
+        assertTrue(bc1.index == 1, "Second index is 1")
+        assertTrue(bc1.previousHash == sha256(bc0), "Previous hash links")
+        assertTrue(bc1.timestamp > bc0.timestamp, "Timestamp increases")
+        
+        // Third breadcrumb
+        after 10.milliseconds {
+            let bc2 = breadcrumb(
+                cell: cell,
+                context: sensors.digest,
+                previous: bc1
+            ).signed(me)
+            
+            assertTrue(bc2.index == 2, "Third index is 2")
+            assertTrue(bc2.previousHash == sha256(bc1), "Chain continues")
+        }
+    }
+}
+
+fn testTrustLevelsFromEpochs() {
+    print("")
+    print("── Trust Levels from Epochs ──")
+    
+    assertEqualTrustLevel(trustLevelFromEpochs(0), .anonymous, "0 epochs = Anonymous")
+    assertEqualTrustLevel(trustLevelFromEpochs(1), .verified, "1 epoch = Verified")
+    assertEqualTrustLevel(trustLevelFromEpochs(9), .verified, "9 epochs = Verified")
+    assertEqualTrustLevel(trustLevelFromEpochs(10), .established, "10 epochs = Established")
+    assertEqualTrustLevel(trustLevelFromEpochs(99), .established, "99 epochs = Established")
+    assertEqualTrustLevel(trustLevelFromEpochs(100), .trusted, "100 epochs = Trusted")
+    assertEqualTrustLevel(trustLevelFromEpochs(1000), .trusted, "1000 epochs = Trusted")
+}
+
+fn testTrustPermissions() {
+    print("")
+    print("── Trust Permissions ──")
+    
+    // Can send
+    assertFalse(canSend(.anonymous), "Anonymous cannot send")
+    assertTrue(canSend(.verified), "Verified can send")
+    assertTrue(canSend(.established), "Established can send")
+    
+    // Can claim handle
+    assertFalse(canClaimHandle(.anonymous), "Anonymous cannot claim handle")
+    assertFalse(canClaimHandle(.verified), "Verified cannot claim handle")
+    assertTrue(canClaimHandle(.established), "Established can claim handle")
+    assertTrue(canClaimHandle(.trusted), "Trusted can claim handle")
+    
+    // Can vouch
+    assertFalse(canVouch(.anonymous), "Anonymous cannot vouch")
+    assertFalse(canVouch(.verified), "Verified cannot vouch")
+    assertFalse(canVouch(.established), "Established cannot vouch")
+    assertTrue(canVouch(.trusted), "Trusted can vouch")
+}
+
+fn testTrustScoreComputation() {
+    print("")
+    print("── Trust Score Computation ──")
+    
+    let score = computeTrustScore(
+        epochs: 10,
+        peerAttestations: config.parisiK,
+        anchorAttestations: 2,
+        secondsSinceActivity: 3600.0,
+        tau0: config.tau0Human
+    )
+    
+    // Base score: log2(11) ≈ 3.46
+    assertTrue(score.baseScore > 3.0, "Base score > 3.0")
+    assertTrue(score.baseScore < 4.0, "Base score < 4.0")
+    
+    // Peer multiplier with k=7: 1 + tanh(1) ≈ 1.76
+    assertTrue(score.peerMultiplier > 1.5, "Peer multiplier > 1.5")
+    assertTrue(score.peerMultiplier < 2.0, "Peer multiplier < 2.0")
+    
+    // Decay should be minimal after 1 hour
+    assertTrue(score.decayFactor > 0.99, "Decay factor > 0.99")
+    
+    // Total should be reasonable
+    assertTrue(score.total > 3.0, "Total score > 3.0")
+}
+
+fn testTrustDecay() {
+    print("")
+    print("── Trust Decay ──")
+    
+    let initial = 10.0
+    let tau0 = 30.0
+    
+    // No decay at t=0
+    let t0 = trustDecayAfterDays(initial, 0.0, tau0)
+    assertTrue(abs(t0 - initial) < 0.001, "No decay at t=0")
+    
+    // Some decay at 30 days
+    let t30 = trustDecayAfterDays(initial, 30.0, tau0)
+    assertTrue(t30 < initial, "Decay at 30 days")
+    assertTrue(t30 > initial * 0.5, "Not too much at 30 days")
+    
+    // More decay at 90 days
+    let t90 = trustDecayAfterDays(initial, 90.0, tau0)
+    assertTrue(t90 < initial * 0.5, "Significant decay at 90 days")
+    
+    // Near-zero at 365 days
+    let t365 = trustDecayAfterDays(initial, 365.0, tau0)
+    assertTrue(t365 < initial * 0.1, "Heavy decay at 365 days")
+    
+    // Print decay timeline
+    print("")
+    print("  Decay Timeline (τ₀ = 30 days):")
+    print("  Days  Trust   Retained")
+    print("  ────  ─────   ────────")
+    for days in [0, 7, 14, 30, 60, 90, 180, 365] {
+        let trust = trustDecayAfterDays(initial, days, tau0)
+        let pct = (trust / initial) * 100.0
+        print("  \(days)\t\(trust.toFixed(2))\t\(pct.toFixed(0))%")
+    }
+}
+
+fn testParisiConstants() {
+    print("")
+    print("── Parisi Constants ──")
+    
+    // Parisi's magic number from starling research
+    assertEqualInt(config.parisiK, 7, "Parisi k = 7")
+    
+    // Percolation threshold: p_c = 1/k ≈ 0.143
+    let percolation = 1.0 / config.parisiK
+    assertTrue(percolation > 0.14, "Percolation > 0.14")
+    assertTrue(percolation < 0.15, "Percolation < 0.15")
+}
+
+fn testEntitySpeeds() {
+    print("")
+    print("── Entity Speeds ──")
+    
+    assertEqualFloat(maxSpeed(.human), 50.0, "Human: 50 km/h")
+    assertEqualFloat(maxSpeed(.drone), 200.0, "Drone: 200 km/h")
+    assertEqualFloat(maxSpeed(.vehicle), 300.0, "Vehicle: 300 km/h")
+    assertEqualFloat(maxSpeed(.robot), 30.0, "Robot: 30 km/h")
+    assertEqualFloat(maxSpeed(.anchor), 0.0, "Anchor: 0 km/h")
+}
+
+fn testCompleteLifecycle() {
+    print("")
+    print("═══════════════════════════════════════════════")
+    print("    TRIP Identity Lifecycle Demo")
+    print("═══════════════════════════════════════════════")
+    print("")
+    
+    // 1. Generate identities
+    print("1. Generating identities...")
+    identity human = Keychain.primary
+    identity drone = Keychain.facet("drone_42")
+    
+    let humanTIT = computeTIT(human.publicKey)
+    let droneTIT = computeTIT(drone.publicKey)
+    
+    print("   Human TIT: \(humanTIT.data.toHex())")
+    print("   Drone TIT: \(droneTIT.data.toHex())")
+    print("   Human Stellar: \(human.stellarAddress)")
+    
+    // 2. Handles
+    print("")
+    print("2. Handles (earned through trajectory)...")
+    print("   Human: @alice")
+    print("   Drone: @drone_42")
+    
+    // 3. Breadcrumbs
+    print("")
+    print("3. Collecting breadcrumbs (MOVING pattern)...")
+    let cell = here.h3(config.h3Resolution)
+    
+    let bc0 = breadcrumb(cell: cell, context: sensors.digest, previous: nil).signed(human)
+    print("   bc[0]: Home - index \(bc0.index)")
+    
+    // 4. Trust progression
+    print("")
+    print("4. Trust progression (from epochs)...")
+    for epochs in [0, 1, 5, 10, 50, 100] {
+        let level = trustLevelFromEpochs(epochs)
+        print("   \(epochs) epochs → \(level)")
+    }
+    
+    // 5. Trust score
+    print("")
+    print("5. Trust score (Parisi k=\(config.parisiK))...")
+    let score = computeTrustScore(
+        epochs: 10,
+        peerAttestations: config.parisiK,
+        anchorAttestations: 2,
+        secondsSinceActivity: 3600.0,
+        tau0: config.tau0Human
+    )
+    print("   Base: \(score.baseScore.toFixed(2))")
+    print("   Peer multiplier: \(score.peerMultiplier.toFixed(2))")
+    print("   Decay: \(score.decayFactor.toFixed(4))")
+    print("   Total: \(score.total.toFixed(2))")
+    
+    print("")
+    print("═══════════════════════════════════════════════")
+    print("  TRIP: Identity is MOVEMENT")
+    print("  The trajectory IS the identity.")
+    print("═══════════════════════════════════════════════")
+    
+    assertTrue(true, "Complete lifecycle executed")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Entry Point
+// ─────────────────────────────────────────────────────────────────────────────
+
+runAllTests()

@@ -1,0 +1,26 @@
+[package]
+name = "trip-protocol"
+version = "1.1.0"
+authors = ["GNS Foundation <camilo@gns.foundation>"]
+description = "TRIP: Trajectory Routing Identity Protocol - Test Suite"
+
+[dependencies]
+gns-crypto-core = "1.0"
+gns-runtime = "1.0"
+
+[targets]
+default = ["native"]
+
+[identity]
+minimum-breadcrumbs = 100
+h3-resolution = 7
+collection-interval = "10m"
+
+[build]
+optimize = "speed"
+
+[trip]
+protocol-version = 1
+parisi-k = 7
+tau0-human = 2592000
+tau0-drone = 864000

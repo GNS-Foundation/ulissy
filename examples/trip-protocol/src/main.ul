@@ -1,0 +1,56 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// TRIP Protocol - Main Entry Point
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// TRIP: Trajectory Routing Identity Protocol
+// "TRIP identities are MOVING patterns that must be continuously
+//  renewed through physical-world activity."
+//
+// Run with: ulissy run
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+import ulissy.prelude
+
+print("╔═══════════════════════════════════════════════════════════════╗")
+print("║                                                               ║")
+print("║   TRIP Protocol v1.1.0                                        ║")
+print("║   Trajectory Routing Identity Protocol                        ║")
+print("║                                                               ║")
+print("║   Written in ULissy: A language for moving machines           ║")
+print("║                                                               ║")
+print("╚═══════════════════════════════════════════════════════════════╝")
+print("")
+
+// Load primary identity
+identity me = Keychain.primary
+
+print("Identity loaded:")
+print("  Stellar: \(me.stellarAddress())")
+print("  Public Key: \(me.publicKey.toHex())")
+print("")
+
+// Show current location (H3 quantized for privacy)
+let cell = here.h3(7)
+print("Current location (H3 res 7): \(cell)")
+print("")
+
+// Configuration
+config {
+    protocolVersion: 1,
+    parisiK: 7,
+    minBreadcrumbsPerEpoch: 100
+}
+
+print("Protocol Configuration:")
+print("  Version: \(config.protocolVersion)")
+print("  Parisi k: \(config.parisiK)")
+print("  Min breadcrumbs/epoch: \(config.minBreadcrumbsPerEpoch)")
+print("")
+
+print("Ready to collect trajectory!")
+print("")
+print("Commands:")
+print("  ulissy run tests/trip_tests.ul  - Run test suite")
+print("  ulissy check                    - Type check")
+print("  ulissy build                    - Compile to Rust")

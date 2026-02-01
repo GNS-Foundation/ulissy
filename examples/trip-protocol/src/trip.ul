@@ -1,0 +1,217 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// TRIP Protocol Module for ULissy
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// This module provides TRIP protocol primitives as ULissy constructs.
+// Import with: import trip
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+import ulissy.prelude
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Protocol Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TRIP_VERSION: Int = 1
+const PARISI_K: Int = 7
+const TAU_0_HUMAN: Int = 2592000
+const TAU_0_DRONE: Int = 864000
+const TAU_0_VEHICLE: Int = 1296000
+const MIN_BREADCRUMBS_PER_EPOCH: Int = 100
+const H3_RESOLUTION_PUBLIC: Int = 7
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TrustLevel { anonymous, verified, established, trusted, vouched }
+
+enum EntityType { human, drone, vehicle, robot, iot, anchor }
+
+enum ProximityType { bluetooth, wifiDirect, nfc, dsrc, uwb }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+// TIT - Trajectory Identity Tag
+type TIT {
+    data: Hash
+    invariant data.length == 16
+}
+
+// Breadcrumb - Signed location proof
+type Breadcrumb {
+    owner: TIT
+    index: Uint64
+    timestamp: Moment
+    cell: H3Cell
+    context: Hash
+    previousHash: Hash
+    signature: Signature
+    
+    invariant timestamp <= now
+}
+
+// Epoch - Aggregated trajectory proof  
+type Epoch {
+    id: String
+    owner: TIT
+    count: Uint32
+    merkleRoot: Hash
+    startIndex: Uint64
+    endIndex: Uint64
+    startTime: Moment
+    endTime: Moment
+    signature: Signature
+    
+    invariant count >= MIN_BREADCRUMBS_PER_EPOCH
+}
+
+// ProximityProof - Peer attestation
+type ProximityProof {
+    witness: TIT
+    subject: TIT
+    timestamp: Moment
+    location: H3Cell
+    proximityType: ProximityType
+    signalStrength: Int8
+    signature: Signature
+}
+
+// TrustScore - Computed trust with Parisi dynamics
+type TrustScore {
+    baseScore: Float
+    peerMultiplier: Float
+    anchorMultiplier: Float
+    decayFactor: Float
+    total: Float
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIT Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn titFromPublicKey(publicKey: PublicKey) -> TIT {
+    let hash = sha256(publicKey)
+    return { data: hash.slice(0, 16) } as TIT
+}
+
+fn titHex(tit: TIT) -> String {
+    return tit.data.toHex()
+}
+
+fn titMatches(tit: TIT, publicKey: PublicKey) -> Bool {
+    let derived = titFromPublicKey(publicKey)
+    return tit.data == derived.data
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trust Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn trustLevelFromEpochs(epochs: Uint64) -> TrustLevel {
+    if epochs == 0 { return .anonymous }
+    if epochs < 10 { return .verified }
+    if epochs < 100 { return .established }
+    return .trusted
+}
+
+fn canSend(level: TrustLevel) -> Bool {
+    return level != .anonymous
+}
+
+fn canClaimHandle(level: TrustLevel) -> Bool {
+    match level {
+        case anonymous: return false
+        case verified: return false
+        case established: return true
+        case trusted: return true
+        case vouched: return true
+    }
+}
+
+fn canVouch(level: TrustLevel) -> Bool {
+    match level {
+        case trusted: return true
+        case vouched: return true
+        default: return false
+    }
+}
+
+fn computeTrustScore(
+    epochs: Uint64, 
+    peers: Uint32, 
+    anchors: Uint32, 
+    inactiveSeconds: Float, 
+    tau0: Float
+) -> TrustScore {
+    let baseScore = log2(1.0 + epochs)
+    let peerMultiplier = 1.0 + tanh(peers / PARISI_K)
+    let anchorMultiplier = 1.0 + tanh(anchors / 3.0)
+    let gamma = 0.03
+    let lambda = 1.0 - exp(-inactiveSeconds / tau0)
+    let decayFactor = exp(-gamma * lambda * inactiveSeconds / 86400.0)
+    let total = baseScore * peerMultiplier * anchorMultiplier * decayFactor
+    
+    return {
+        baseScore: baseScore,
+        peerMultiplier: peerMultiplier,
+        anchorMultiplier: anchorMultiplier,
+        decayFactor: decayFactor,
+        total: total
+    } as TrustScore
+}
+
+fn trustDecayAfterDays(initial: Float, days: Float, tau0Days: Float) -> Float {
+    let lambda = 1.0 - exp(-days / tau0Days)
+    let gamma = 0.03
+    return initial * exp(-gamma * lambda * days)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Handle Validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn isValidHandle(name: String) -> Bool {
+    let clean = if name.startsWith("@") { name.slice(1) } else { name }
+    
+    if clean.length < 1 { return false }
+    if clean.length > 20 { return false }
+    
+    let first = clean.charAt(0)
+    if first == "_" || first.isDigit() { return false }
+    
+    for char in clean.chars() {
+        if !char.isLowercase() && !char.isDigit() && char != "_" {
+            return false
+        }
+    }
+    
+    return true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Entity Speed Limits (km/h)
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn maxSpeedKmh(entityType: EntityType) -> Float {
+    match entityType {
+        case human: return 50.0
+        case drone: return 200.0
+        case vehicle: return 300.0
+        case robot: return 30.0
+        case iot: return 0.1
+        case anchor: return 0.0
+    }
+}
+
+fn tau0Seconds(entityType: EntityType) -> Int {
+    match entityType {
+        case human: return TAU_0_HUMAN
+        case drone: return TAU_0_DRONE
+        case vehicle: return TAU_0_VEHICLE
+        default: return TAU_0_HUMAN
+    }
+}
