@@ -1,0 +1,63 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// ULissy `if let` Test
+// ═══════════════════════════════════════════════════════════════════════════
+
+import ulissy.prelude
+
+fn testIfLet() {
+    print("Testing if let optional binding...")
+
+    // 1. Basic Optional Unwrapping
+    let optVal: Int? = 42
+    if let x = optVal {
+        print("Success: Unwrapped \(x)")
+    } else {
+        print("Error: Should not be nil")
+    }
+
+    // 2. Nil Handling
+    let nilVal: Int? = nil
+    if let y = nilVal {
+        print("Error: Should not execute then block")
+    } else {
+        print("Success: Executed else block for nil")
+    }
+    
+    // 3. Search Integration (returns Optional<SearchResult>)
+    print("Testing search integration...")
+    // Note: In real runtime this might be empty/nil depending on mock data
+    // We assume @alice exists in the mock environment or returns nil gracefully
+    let alice = search @alice
+    
+    if let peer = alice {
+        print("Found identity: \(peer.handle)")
+        // Verify we can access fields on the unwrapped 'peer'
+        if peer.trust > 0.5 {
+            print("Trusted peer!")
+        }
+    } else {
+        print("Identity not found (expected if mock data missing)")
+    }
+
+    // 4. Nested if let
+    let nested: Int? = 100
+    if let a = optVal {
+        if let b = nested {
+            print("Nested success: \(a) + \(b) = \(a+b)")
+        }
+    }
+    
+    // 5. Chained else if let
+    let fail: Int? = nil
+    let success: Int? = 7
+    
+    if let f = fail {
+        print("Branch 1")
+    } else if let s = success {
+        print("Branch 2 Success: \(s)")
+    } else {
+        print("Branch 3")
+    }
+}
+
+testIfLet()

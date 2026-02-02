@@ -105,6 +105,7 @@ impl TypeChecker {
             ast::Statement::FnDecl(fn_decl) => self.check_fn_decl(fn_decl),
             ast::Statement::ReturnStatement(ret) => self.check_return_statement(ret),
             ast::Statement::IfStatement(if_stmt) => self.check_if_statement(if_stmt),
+            ast::Statement::IfLetStatement(stmt) => self.check_if_let_statement(stmt),
             ast::Statement::ForStatement(for_stmt) => self.check_for_statement(for_stmt),
             ast::Statement::MatchStatement(match_stmt) => self.check_match_statement(match_stmt),
             ast::Statement::AfterBlock(after) => self.check_after_block(after),
@@ -654,6 +655,9 @@ impl TypeChecker {
                      // Recursively check
                      vec![self.check_if_statement(nested_if)?]
                  }
+                 ast::ElseBranch::ElseIfLet(nested_if_let) => {
+                     vec![self.check_if_let_statement(nested_if_let)?]
+                 }
              };
              Some(stmts)
         } else {
@@ -667,6 +671,72 @@ impl TypeChecker {
             span: stmt.span,
         })
     }
+
+    fn check_if_let_statement(&mut self, stmt: &ast::IfLetStatement) -> Result<TypedStatement, TypeError> {
+        let typed_value = self.check_expression(&stmt.value)?;
+        
+        // Value must be Optional<T>
+        let inner_type = match &typed_value.ty {
+            Type::Optional(inner) => inner.as_ref().clone(),
+            _ => {
+                return Err(TypeError::new(
+                    &format!("if let requires an Optional type, found {}", typed_value.ty),
+                    stmt.span
+                ));
+            }
+        };
+        
+        // Type-check then branch with binding in scope as the UNWRAPPED type
+        self.context.push_scope();
+        self.context.define(&stmt.binding, inner_type.clone(), false);
+        
+        let mut then_block = Vec::new();
+        for s in &stmt.then_branch.statements {
+            match self.check_statement(s) {
+                Ok(t) => then_block.push(t),
+                Err(e) => self.errors.push(e),
+            }
+        }
+        self.context.pop_scope();
+        
+        // Type-check else branch (binding is NOT in scope here)
+        let else_block = if let Some(branch) = &stmt.else_branch {
+            let stmts = match &**branch {
+                ast::ElseBranch::Else(block) => {
+                    self.context.push_scope();
+                    let mut stmts = Vec::new();
+                    for s in &block.statements {
+                        match self.check_statement(s) {
+                            Ok(t) => stmts.push(t),
+                            Err(e) => self.errors.push(e),
+                        }
+                    }
+                    self.context.pop_scope();
+                    stmts
+                }
+                ast::ElseBranch::ElseIf(nested_if) => {
+                    vec![self.check_if_statement(nested_if)?]
+                }
+                ast::ElseBranch::ElseIfLet(nested_if_let) => {
+                    vec![self.check_if_let_statement(nested_if_let)?]
+                }
+            };
+            Some(stmts)
+        } else {
+            None
+        };
+        
+        Ok(TypedStatement {
+            kind: TypedStatementKind::IfLetStatement {
+                binding: stmt.binding.clone(),
+                binding_type: inner_type,
+                value: typed_value,
+                then_block,
+                else_block,
+            },
+            span: stmt.span,
+        })
+    }
     
     fn check_for_statement(&mut self, stmt: &ast::ForStatement) -> Result<TypedStatement, TypeError> {
         let collection = self.check_expression(&stmt.iterable)?;
@@ -674,6 +744,7 @@ impl TypeChecker {
         // Determine item type
         let item_type = match &collection.ty {
             Type::Array(inner) => *inner.clone(),
+            Type::SearchResultSet => Type::SearchResult,
             Type::Any => Type::Any,
             _ => return Err(TypeError::new(
                 &format!("Cannot iterate over {}", collection.ty),
@@ -773,6 +844,7 @@ impl TypeChecker {
         let span = self.get_expr_span(expr);
         
         match expr {
+            ast::Expression::Search(search) => self.check_search_expression(search),
             ast::Expression::Literal(lit) => {
                 let ty = match lit {
                     ast::Literal::Int(_) => Type::Int,
@@ -908,9 +980,10 @@ impl TypeChecker {
             ast::Expression::Member(member) => {
                 let object = self.check_expression(&member.object)?;
                 
-                let ty = self.context.get_member_type(&object.ty, &member.member)
-                    .ok_or_else(|| TypeError::new(
+                let ty = self.lookup_member_type(&object.ty, &member.member)
+                    .ok_or_else(|| TypeError::with_hint(
                         &format!("'{}' has no member '{}'", object.ty, member.member),
+                        &format!("Available members: {}", self.list_members(&object.ty)),
                         span,
                     ))?;
                 
@@ -1218,6 +1291,212 @@ impl TypeChecker {
             span,
         })
     }
+
+    /// Type-check search expression with privacy enforcement
+    fn check_search_expression(&mut self, search: &ast::SearchExpr) -> Result<TypedExpr, TypeError> {
+        // --- Check search target ---
+        let typed_target = match &search.target {
+            ast::SearchTarget::Nearby { radius } => {
+                let typed_radius = if let Some(r) = radius {
+                    let tr = self.check_expression(r)?;
+                    if tr.ty != Type::Distance && tr.ty != Type::Int && tr.ty != Type::Float {
+                        return Err(TypeError::new(
+                            &format!("Nearby radius must be Distance, Int or Float, found {}", tr.ty),
+                            search.span
+                        ));
+                    }
+                    Some(Box::new(tr))
+                } else {
+                    None
+                };
+                TypedSearchTarget::Nearby { radius: typed_radius }
+            }
+            
+            ast::SearchTarget::Within { center, radius } => {
+                let typed_center = self.check_expression(center)?;
+                let typed_radius = self.check_expression(radius)?;
+                
+                // Privacy: center CANNOT be Breadcrumb, Trajectory, or PrivateKey
+                self.reject_private_in_search(&typed_center.ty, search.span,
+                    "search within() center")?;
+                
+                // Validate center type
+                match &typed_center.ty {
+                    Type::H3Cell | Type::Coordinates | Type::Handle | Type::String => {}
+                    _ => return Err(TypeError::new(
+                        &format!("search within() center must be H3Cell, Coordinates, Handle, or String, found {}", typed_center.ty),
+                        search.span
+                    )),
+                }
+                
+                if typed_radius.ty != Type::Distance && typed_radius.ty != Type::Int && typed_radius.ty != Type::Float {
+                    return Err(TypeError::new(
+                        &format!("search within() radius must be Distance, Int or Float, found {}", typed_radius.ty),
+                        search.span
+                    ));
+                }
+                
+                TypedSearchTarget::Within {
+                    center: Box::new(typed_center),
+                    radius: Box::new(typed_radius),
+                }
+            }
+            
+            ast::SearchTarget::Identity { handle } => {
+                let typed_handle = self.check_expression(handle)?;
+                match &typed_handle.ty {
+                    Type::Handle | Type::FacetAddress | Type::String => {}
+                    _ => return Err(TypeError::new(
+                        &format!("search identity target must be Handle, FacetAddress, or String, found {}", typed_handle.ty),
+                        search.span
+                    )),
+                }
+                TypedSearchTarget::Identity { handle: Box::new(typed_handle) }
+            }
+            
+            ast::SearchTarget::Text { query } => {
+                let typed_query = self.check_expression(query)?;
+                if typed_query.ty != Type::String {
+                    return Err(TypeError::new(
+                        &format!("search text query must be String, found {}", typed_query.ty),
+                        search.span
+                    ));
+                }
+                TypedSearchTarget::Text { query: Box::new(typed_query) }
+            }
+        };
+
+        // --- Check filters ---
+        let mut typed_filters = Vec::new();
+        for filter in &search.filters {
+            let typed_filter = match filter {
+                ast::SearchFilter::TrustThreshold { op, value } => {
+                    let typed_value = self.check_expression(value)?;
+                    self.reject_private_in_search(&typed_value.ty, search.span, "trust filter")?;
+                    match &typed_value.ty {
+                        Type::Float | Type::Int | Type::TrustScore => {}
+                        _ => return Err(TypeError::new(
+                            &format!("Trust threshold must be numeric, found {}", typed_value.ty),
+                            search.span
+                        )),
+                    }
+                    TypedSearchFilter::TrustThreshold {
+                        op: *op,
+                        value: Box::new(typed_value),
+                    }
+                }
+                
+                ast::SearchFilter::FacetMatch { facet_name } => {
+                    let typed_name = self.check_expression(facet_name)?;
+                    if typed_name.ty != Type::String {
+                        return Err(TypeError::new(
+                            &format!("Facet filter must be String, found {}", typed_name.ty),
+                            search.span
+                        ));
+                    }
+                    TypedSearchFilter::FacetMatch { facet_name: Box::new(typed_name) }
+                }
+                
+                ast::SearchFilter::ActiveWithin { duration } => {
+                    let typed_duration = self.check_expression(duration)?;
+                    if typed_duration.ty != Type::Duration && typed_duration.ty != Type::Int && typed_duration.ty != Type::Float {
+                        return Err(TypeError::new(
+                            &format!("Active within filter must be Duration, found {}", typed_duration.ty),
+                            search.span
+                        ));
+                    }
+                    TypedSearchFilter::ActiveWithin { duration: Box::new(typed_duration) }
+                }
+                
+                ast::SearchFilter::OrgMatch { org_name } => {
+                    let typed_name = self.check_expression(org_name)?;
+                    if typed_name.ty != Type::String {
+                        return Err(TypeError::new(
+                            &format!("Org filter must be String, found {}", typed_name.ty),
+                            search.span
+                        ));
+                    }
+                    TypedSearchFilter::OrgMatch { org_name: Box::new(typed_name) }
+                }
+                
+                ast::SearchFilter::FieldCompare { field, op, value } => {
+                    // Backward-compatible generic filter
+                    match field.as_str() {
+                        "trust" | "distance" | "age" | "handlers" | "credentials" => {}
+                        _ => return Err(TypeError::new(
+                            &format!("Unknown search field '{}'. Use trust, distance, age, or typed filters (facet ==, active within, org ==)", field),
+                            search.span
+                        )),
+                    }
+                    let typed_value = self.check_expression(value)?;
+                    self.reject_private_in_search(&typed_value.ty, search.span, &format!("search filter '{}'", field))?;
+                    TypedSearchFilter::FieldCompare {
+                        field: field.clone(),
+                        op: *op,
+                        value: Box::new(typed_value),
+                    }
+                }
+            };
+            typed_filters.push(typed_filter);
+        }
+
+        // --- Check ranking ---
+        let ranking = search.ranking.clone().map(|r| {
+            // Convert AST ranking to typed ranking
+            match &r {
+                ast::SearchRanking::Trust { order } => TypedSearchRanking::Trust { order: *order },
+                ast::SearchRanking::Distance { order } => TypedSearchRanking::Distance { order: *order },
+                ast::SearchRanking::Recency { order } => TypedSearchRanking::Recency { order: *order },
+                ast::SearchRanking::Relevance { order } => TypedSearchRanking::Relevance { order: *order },
+            }
+        });
+
+        // --- Determine result type ---
+        // Identity lookups return Optional<SearchResult>, everything else returns SearchResultSet
+        let result_type = match &search.target {
+            ast::SearchTarget::Identity { .. } => Type::Optional(Box::new(Type::SearchResult)),
+            _ => Type::SearchResultSet,
+        };
+
+        Ok(TypedExpr {
+            kind: TypedExprKind::Search {
+                target: typed_target,
+                filters: typed_filters,
+                ranking,
+            },
+            ty: result_type,
+            span: search.span,
+        })
+    }
+    
+    /// Privacy gate: reject private spatial types in any search context
+    fn reject_private_in_search(&self, ty: &Type, span: ast::Span, context: &str) -> Result<(), TypeError> {
+        match ty {
+            Type::Breadcrumb => Err(TypeError::new(
+                &format!("PRIVACY VIOLATION: Cannot use Breadcrumb in {}. Breadcrumbs contain raw GPS — use H3Cell or Distance instead.", context),
+                span
+            )),
+            Type::Trajectory => Err(TypeError::new(
+                &format!("PRIVACY VIOLATION: Cannot use Trajectory in {}. Search operates on proofs, not paths.", context),
+                span
+            )),
+            Type::PrivateKey => Err(TypeError::new(
+                &format!("PRIVACY VIOLATION: Cannot use PrivateKey in {}.", context),
+                span
+            )),
+            Type::Identity => Err(TypeError::new(
+                &format!("PRIVACY VIOLATION: Cannot use Identity in {}. Use Handle for public lookups.", context),
+                span
+            )),
+            Type::Array(inner) if matches!(**inner, Type::Breadcrumb | Type::Trajectory) => {
+                Err(TypeError::new(
+                    &format!("PRIVACY VIOLATION: Cannot use Array of private type in {}.", context),
+                    span
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
     
     /// Type check nil coalescing: expr ?? default
     /// 
@@ -1303,6 +1582,29 @@ impl TypeChecker {
                 "hasHandle" => Some(Type::Bool),
                 _ => None,
             },
+            Type::SearchResultSet => match member {
+                "count" => Some(Type::Int),
+                _ => None,
+            },
+            Type::SearchResult => match member {
+                "handle" => Some(Type::Handle),
+                "distance" => Some(Type::Optional(Box::new(Type::Distance))),
+                "trust" | "trust_score" => Some(Type::TrustScore),
+                "age" | "last_active" => Some(Type::Moment),
+                "tit" => Some(Type::Hash),
+                "facets" => Some(Type::Array(Box::new(Type::FacetAddress))),
+                "proof" => Some(Type::PresenceProof),
+                "rank" => Some(Type::Float),
+                _ => None,
+            },
+            Type::PresenceProof => match member {
+                "epoch_count" => Some(Type::Int),
+                "first_seen" => Some(Type::Moment),
+                "spatial_diversity" => Some(Type::Float),
+                "trajectory_continuity" => Some(Type::Float),
+                "verification_level" => Some(Type::Int),
+                _ => None,
+            },
             _ => self.context.get_member_type(ty, member),
         }
     }
@@ -1312,6 +1614,8 @@ impl TypeChecker {
             Type::Trajectory => "count, last, first, pending, uniqueCells".to_string(),
             Type::Breadcrumb => "hash, timestamp, h3Index, signature, published".to_string(),
             Type::Identity => "publicKey, trajectory, hasHandle".to_string(),
+            Type::SearchResultSet => "count".to_string(),
+            Type::SearchResult => "handle, distance, trust, age, tit".to_string(),
             _ => "(unknown)".to_string(),
         }
     }
@@ -1381,6 +1685,7 @@ impl TypeChecker {
             ast::Expression::OptionalMember(om) => om.span,
             ast::Expression::OptionalMethodCall(omc) => omc.span,
             ast::Expression::NilCoalescing(nc) => nc.span,
+            ast::Expression::Search(s) => s.span,
             _ => ast::Span::default(),
         }
     }

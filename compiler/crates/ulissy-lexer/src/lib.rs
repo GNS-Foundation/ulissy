@@ -63,6 +63,12 @@ pub enum TokenKind {
     Config,         // config
     Default,        // default
 
+    // === SEARCH KEYWORDS ===
+    Search,         // search
+    Nearby,         // nearby
+    Ranked,         // ranked
+    By,             // by
+
     // === LITERALS ===
     IntLiteral(i64),
     FloatLiteral(f64),
@@ -154,6 +160,10 @@ impl fmt::Display for TokenKind {
             TokenKind::IntLiteral(n) => write!(f, "{}", n),
             TokenKind::FloatLiteral(n) => write!(f, "{}", n),
             TokenKind::StringLiteral(s) => write!(f, "\"{}\"", s),
+            TokenKind::Search => write!(f, "search"),
+            TokenKind::Nearby => write!(f, "nearby"),
+            TokenKind::Ranked => write!(f, "ranked"),
+            TokenKind::By => write!(f, "by"),
             _ => write!(f, "{:?}", self),
         }
     }
@@ -567,6 +577,10 @@ impl<'a> Lexer<'a> {
             "invariant" => TokenKind::Invariant,
             "config" => TokenKind::Config,
             "default" => TokenKind::Default,
+            "search" => TokenKind::Search,
+            "nearby" => TokenKind::Nearby,
+            "ranked" => TokenKind::Ranked,
+            "by" => TokenKind::By,
             _ => TokenKind::Identifier(ident),
         };
 

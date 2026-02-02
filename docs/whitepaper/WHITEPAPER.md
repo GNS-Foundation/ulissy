@@ -3,7 +3,7 @@
 
 **WHITEPAPER**
 *Technical Edition for Language Designers & Protocol Engineers*
-*2025 — Version 0.3.2*
+*2025–2026 — Version 0.4.2 (IETF I-D: draft-ayerbe-trip-protocol-00)*
 
 **ULISSY Foundation / GNS Protocol**
 
@@ -23,12 +23,12 @@ The name honors Ulysses (Odysseus)—the mythological figure who proved his iden
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| **Lexer** | ✅ Complete | 64 token types, handles, facets, interpolation, `default` keyword |
-| **Parser** | ✅ Complete | 18 statement types, full expression parsing, `self`/`Self`/`config` support |
-| **Type Checker** | ✅ Complete | Domain-specific types, inference, validation, two-pass function resolution |
-| **Code Generator** | ✅ Complete | Rust emission, Cargo.toml generation, 74/74 TRIP tests passing |
+| **Lexer** | ✅ Complete | 68 token types, handles, facets, interpolation, `search`/`nearby`/`ranked`/`by` keywords |
+| **Parser** | ✅ Complete | 20 statement types, full expression parsing, search expressions, `if let` binding |
+| **Type Checker** | ✅ Complete | Domain-specific types, inference, validation, two-pass function resolution, privacy enforcement |
+| **Code Generator** | ✅ Complete | Rust emission, Cargo.toml generation, typed search builder pattern |
 | **CLI** | ✅ Complete | `ulissy build`, `check`, `run`, `new`, `lex`, `parse`, `fmt`, `info` |
-| **Runtime** | ✅ Complete | `gns-runtime` crate with identity, breadcrumbs, scheduling, sensors, location |
+| **Runtime** | ✅ Complete | `gns-runtime` crate with scheduling, sensors, location |
 | **Standard Library** | ✅ Complete | 9 modules: core, spatial, crypto, temporal, sensors, trajectory, messaging, network, prelude |
 | **VS Code Extension** | ✅ Complete | Syntax highlighting, 40+ snippets, commands, diagnostics |
 
@@ -36,42 +36,69 @@ The name honors Ulysses (Odysseus)—the mythological figure who proved his iden
 
 ## Changelog
 
-### Version 0.3.2 (February 2025)
+### Version 0.4.2 (February 2026)
 
-**Code Generator — First Fully Working Compilation:**
+**Optional Binding:**
 
-The code generator reached production-ready status with the TRIP Protocol test suite compiling and executing successfully: **74/74 tests passing**.
+1. **`if let` statement** — Optional binding syntax for safe unwrapping of `Optional<T>` values. Binds the unwrapped value as `T` in the then-block scope; the else-block executes when the value is nil. Completes ULissy's optional story alongside `?.` chaining and `match/case nil`.
+   ```ulissy
+   let alice = search @alice              // Optional<SearchResult>
+   if let peer = alice {
+       print(peer.handle)                 // peer is SearchResult (unwrapped)
+   } else {
+       print("Not found")
+   }
+   ```
 
-**Codegen Fixes (82 compilation errors → 0):**
+2. **`else if let` chaining** — `ElseIfLet` variant in `ElseBranch` enables chaining optional bindings in conditional chains.
 
-1. **Type inference for Any/Unknown** — Omit type annotations when the resolved type is `Any` or `Unknown`, letting Rust infer the actual type from the right-hand side expression
+**Unit Alias Expansion:**
 
-2. **String vs &str handling** — Strip `.to_string()` from string literal arguments passed to `Keychain::facet()`, `starts_with()`, and other methods expecting `&str`
+3. **Singular and abbreviated unit suffixes** — Added singular forms (`meter`, `kilometer`, `second`, `minute`, `hour`, `day`) and abbreviations (`m`, `km`, `sec`, `min`, `hr`) alongside existing plural forms. All resolve to correct `Distance` or `Duration` types.
+   ```ulissy
+   500.m           // Distance (same as 500.meters)
+   5.km            // Distance (same as 5.kilometers)
+   1.hour          // Duration (same as 1.hours)
+   30.min          // Duration (same as 30.minutes)
+   ```
 
-3. **H3 resolution casting** — Generate `.to_h3(resolution as u8)?` with proper integer downcast and Result unwrapping
+**Type System Fixes:**
 
-4. **Sign/verify reference handling** — Add `&` prefix for identity references in `.sign(&identity)?` calls; use `to_signable_bytes()` for signature verification
+4. **`Nil` assignable to `Optional<T>`** — `is_assignable_from` now correctly allows assigning `nil` to any optional type.
 
-5. **Division type casting** — Automatically cast both operands to `f64` in division expressions to prevent integer truncation
+5. **`TrustScore` comparable with `Float`** — `binary_result` updated to allow trust score comparisons in search filter contexts (e.g., `peer.trust > 0.5`).
 
-6. **Static variable scoping** — Generate `var` declarations as `static mut` at module level with `unsafe` blocks for access, enabling cross-function mutable state
+### Version 0.4.1 (February 2026)
 
-7. **Recursive async functions** — Detect self-referencing function calls and wrap in `Box::pin(async move { ... })` with `Pin<Box<dyn Future>>` return type
+**TrIP Search — Typed Filters & Full Query Coverage (Patch):**
 
-8. **Enum variant resolution** — Build a pre-pass `enum_variant_map` (HashMap) mapping PascalCase variant names to their parent enum for pattern matching and shorthand syntax
+1. **Expanded `SearchTarget`** — Added `Within { center, radius }`, `Identity { handle }`, and `Text { query }` variants. Parser now handles `search within(center, radius)`, `search @handle`, and `search "text"` in addition to `search nearby`.
 
-9. **Function argument casting** — Track function parameter types in `fn_signatures` HashMap; automatically cast arguments at call sites (e.g., `i64` → `f64`)
+2. **Typed `SearchFilter` enum** — Replaced generic `{ field, op, value }` struct with semantic variants: `TrustThreshold`, `FacetMatch`, `ActiveWithin`, `OrgMatch`, `FieldCompare`. Compile-time validation for each filter type.
 
-10. **Two-pass generation** — Pass 1 emits module-level declarations (types, enums, functions, static vars); Pass 2 emits main execution logic, skipping items already declared
+3. **`PresenceProof` member access** — `SearchResult.proof` now exposes `epoch_count`, `spatial_diversity`, `trajectory_continuity`, `verification_level`, and `first_seen` fields.
 
-**Runtime Fixes (8 test failures → 0):**
+4. **`Optional<SearchResult>` for identity lookups** — `search @handle` returns `Optional<SearchResult>` instead of `SearchResultSet`, enabling `if let` unwrapping.
 
-1. **Test counters** — Assignment expressions (`var = var + 1`) now generate proper `unsafe { var += 1; }` for static mutable variables
-2. **Handle validation** — `name.replace("@", "")` expression correctly emitted instead of empty string default
-3. **TIT test vector** — Corrected SHA-256 expected hash for sequential key `[0,1,...,31]`
-4. **Breadcrumb signature** — Use `to_signable_bytes()` (excludes signature field) instead of `to_bytes()` for verification
+5. **Ranking key expansion** — Added `Recency` and `Relevance` (composite TrustRank) ranking keys alongside existing `Trust` and `Distance`. Parser accepts `age` as alias for `recency`.
 
----
+6. **Typed code generation** — Codegen emits typed builder methods (`.trust_min()`, `.facet()`, `.active_within()`, `.org()`, `.within()`, `.identity()`, `.text()`, `RankingKey::`) instead of generic `.filter()` calls.
+
+### Version 0.4.0 (February 2026)
+
+**TrIP Search Primitives — Language-Level Spatial Discovery:**
+
+1. **`search` keyword** — New expression type for spatial-identity queries. Search is a first-class language construct, not a library call. Composes with `let`, `for`, `every`, `when` blocks.
+
+2. **`nearby`, `ranked`, `by` keywords** — Added to lexer alongside existing `within`/`where`. `search nearby(500.meters) where trust > 0.5 ranked by distance asc` is a complete expression.
+
+3. **Search AST nodes** — `SearchExpr`, `SearchTarget`, `SearchFilter`, `SearchRanking` with `asc`/`desc` ordering.
+
+4. **7 new types** — `TrustScore`, `SearchResult`, `SearchResultSet`, `PresenceProof`, `SearchQuery`, `SpatialFilter`, `IdentityFilter` added to the type system.
+
+5. **Compile-time privacy enforcement** — `reject_private_in_search()` gate blocks `Breadcrumb`, `Trajectory`, `PrivateKey`, `Identity`, and `Array<private>` from appearing in search contexts. If the code compiles, it respects the TrIP privacy model.
+
+6. **Builder-pattern code generation** — Search expressions compile to `gns_search::query()` with chained `.nearby()`, `.trust_min()`, `.rank_by()` calls, emitting idiomatic Rust.
 
 ### Version 0.3.1 (January 2025)
 
@@ -701,10 +728,8 @@ let record = lookupHandle(@alice)
 │       │                                                         │
 │       ▼                                                         │
 │  ┌─────────────┐                                                │
-│  │  Codegen    │  Rust emission (v0.1.4)                         │
+│  │  Codegen    │  Rust emission                                 │
 │  │             │  Cargo.toml generation                         │
-│  │             │  Two-pass: module decls + main logic           │
-│  │             │  74/74 TRIP tests passing                      │
 │  └─────────────┘                                                │
 │       │                                                         │
 │       ▼                                                         │
@@ -715,14 +740,48 @@ let record = lookupHandle(@alice)
 
 ---
 
-## 8. Roadmap
+## 8. Standards Status
 
-### Completed (v0.3.2) ✅
+The TrIP (Trajectory-based Recognition of Identity Proof) protocol, which defines the Proof-of-Trajectory mechanism implemented by ULissy's `trajectory` module, has been formally submitted to the Internet Engineering Task Force (IETF) as an Individual Internet-Draft:
+
+> **draft-ayerbe-trip-protocol-00**
+> *TrIP: Trajectory-based Recognition of Identity Proof*
+> February 2026 — Informational
+> https://datatracker.ietf.org/doc/draft-ayerbe-trip-protocol/
+
+The Internet-Draft specifies TrIP as a standalone, transport-agnostic protocol independent of ULissy, GNS, or any specific application layer. It defines:
+
+- **Breadcrumb wire format** using CBOR (RFC 8949) with deterministic encoding
+- **Epoch aggregation** with Merkle tree integrity proofs
+- **Trajectory Identity Token (TIT)** derivation as a 128-bit pseudonym
+- **Trust computation** using Gaussian temporal decay and spatial diversity metrics
+- **Verification procedures** for breadcrumbs, epochs, and TITs
+- **CDDL schema** (RFC 8610) for formal data structure definitions
+
+The I-D references established IETF standards: Ed25519 (RFC 8032) for signatures, SHA-256 (RFC 6234) for hashing, and CBOR (RFC 8949) for serialization.
+
+ULissy serves as the reference implementation language for TrIP. The `ulissy.trajectory` and `ulissy.crypto` standard library modules directly implement the data structures and algorithms specified in the Internet-Draft.
+
+| Component | ULissy Module | I-D Section |
+|-----------|--------------|-------------|
+| Breadcrumb structure | `ulissy.trajectory` | §3 Breadcrumb Specification |
+| H3 spatial quantization | `ulissy.spatial` | §3.3 Spatial Quantization |
+| Context digest | `ulissy.sensors` | §3.4 Context Digest Construction |
+| Epoch bundling | `ulissy.trajectory` | §5 Epoch Specification |
+| Trust scoring | `ulissy.trajectory` | §6 Trust Computation |
+| Ed25519 signatures | `ulissy.crypto` | §2 Protocol Architecture |
+| CBOR encoding | `ulissy.network` | §8 CBOR Encoding |
+
+---
+
+## 9. Roadmap
+
+### Completed (v0.3.1) ✅
 
 #### Compiler
 - ✅ Formal EBNF grammar specification
 - ✅ Lexer implementation in Rust (64 token types)
-- ✅ Parser implementation in Rust (18 statement types)
+- ✅ Parser implementation in Rust (20 statement types)
 - ✅ AST with full expression support
 - ✅ `self` and `Self` keyword support
 - ✅ `config` access in expressions
@@ -730,14 +789,14 @@ let record = lookupHandle(@alice)
 - ✅ `if` expressions
 - ✅ `for` loops
 - ✅ Assignment expressions
+- ✅ `search` expressions (4 targets: nearby, within, identity, text)
+- ✅ `if let` optional binding
+- ✅ Compile-time privacy enforcement for search contexts
 - ✅ Type checker with two-pass function resolution
-- ✅ Code generator with two-pass Rust emission
-- ✅ Automatic type inference, casting, and async handling
-- ✅ Recursive function detection (Box::pin)
-- ✅ Enum variant resolution via pre-pass mapping
+- ✅ 7 search types: TrustScore, SearchResult, SearchResultSet, PresenceProof, SearchQuery, SpatialFilter, IdentityFilter
+- ✅ Code generator (Rust emission with typed search builder pattern)
 - ✅ Cargo.toml generation
 - ✅ CLI tool (`ulissy` command with 8 subcommands)
-- ✅ **74/74 TRIP Protocol tests passing** (first working compilation)
 
 #### Runtime (`gns-runtime`)
 - ✅ Duration module (time spans with units)
@@ -768,29 +827,56 @@ let record = lookupHandle(@alice)
 - ✅ Real-time diagnostics
 - ✅ Custom file icon
 
-### Planned (v1.0)
+#### Standards
+- ✅ IETF Internet-Draft `draft-ayerbe-trip-protocol-00` submitted and posted
+- ✅ TrIP protocol formally specified independently of ULissy
+- ✅ CBOR wire format defined with CDDL schema
+- ✅ Provisional Patent #63/948,788 filed
 
-- ⏳ Language Server Protocol (LSP) - full IDE integration
-- ⏳ Go to definition, find references
-- ⏳ Debugger integration
-- ⏳ Documentation generator
-- ⏳ Package manager
-- ⏳ Mobile platform integration (iOS/Android)
-- ⏳ Self-hosting (compiler written in ULissy)
+### Phase 1: Protocol Hardening (v0.4)
+
+Priority: establish TrIP as an implementable, verifiable protocol standard.
+
+- ⏳ **`trip-core` Rust crate** — Standalone reference implementation of the TrIP protocol (CBOR wire format, breadcrumb verification, epoch Merkle trees, TIT derivation) with zero ULissy dependency. Provides the second independent implementation required for IETF Standards Track advancement.
+- ⏳ **`gns-search` Rust crate** — Runtime implementation of the `gns_search::query()` builder pattern that compiled ULissy search expressions target. Bridges ULissy search primitives to the H3 spatial index via PostgreSQL with the H3 extension.
+- ⏳ **Mobile FFI bridge** — Compile ULissy→Rust output as a shared library callable from Flutter/Dart via FFI on iOS and Android. Closes the loop from language specification to working mobile application.
+- ⏳ **Documentation generator** — `ulissy doc` command that extracts doc comments from `.ul` source files and emits structured Markdown or HTML documentation. Critical for protocol adoption visibility following IETF publication.
+
+### Phase 2: Developer Experience (v0.5)
+
+Priority: make ULissy usable by developers beyond the core team.
+
+- ⏳ **Language Server Protocol (LSP)** — Full LSP implementation providing autocompletion, hover documentation, go-to-definition, find-references, and real-time error diagnostics. Enables ULissy integration with VS Code, Neovim, Helix, and any LSP-compatible editor.
+- ⏳ **Module registry** — Protocol-aware package system where modules map to TrIP protocol extensions (e.g., `ulissy add trip.epoch-verifier`, `ulissy add trip.trust-scorer`). Positions packages as protocol components rather than generic code libraries.
+- ⏳ **TrIP Search API** — REST endpoint (`GET /v1/search`) backed by the H3 spatial index, consuming GNS backend events. Client SDKs for JavaScript, Python, and Dart. See *TrIP Search Whitepaper* for full specification.
+
+### Phase 3: Language Maturity (v1.0)
+
+Priority: production-grade language infrastructure.
+
+- ⏳ **Debugger integration** — Source-level debugging that maps ULissy source positions to generated Rust code, enabling breakpoints, step-through, and variable inspection in the original `.ul` source.
+- ⏳ **Self-hosting** — ULissy compiler rewritten in ULissy, bootstrapping from the existing Rust implementation. Demonstrates language completeness and serves as the definitive test of the type system and code generator.
+- ⏳ **IETF Standards Track** — Advance `draft-ayerbe-trip-protocol` from Informational to Standards Track with two verified independent implementations (ULissy reference + `trip-core` Rust crate) and working group adoption (target: RATS or new BOF session).
 
 ---
 
-## 9. Conclusion
+## 10. Conclusion
 
 ULissy represents a new category of programming language—one designed for the physical world rather than abstract computation. By treating space, time, identity, and movement as fundamental rather than incidental, ULissy makes secure, privacy-preserving, spatially-aware applications natural to write.
 
-Combined with the GNS Protocol, ULissy provides the complete stack for identity-anchored computing:
+With the TrIP protocol now formally specified as IETF Internet-Draft `draft-ayerbe-trip-protocol-00`, the Proof-of-Trajectory mechanism has entered the international standards pipeline—the same process that produced TCP, HTTP, TLS, and DNS. ULissy provides the developer-facing implementation of this protocol.
 
-- **GNS**: The protocol (what)
-- **ULissy**: The language (how)
+Combined with the GNS Protocol and TrIP Search, ULissy provides the complete stack for identity-anchored computing:
+
+- **TrIP**: The proof protocol (IETF I-D)
+- **GNS**: The naming system (identity resolution)
+- **TrIP Search**: The discovery layer (spatial-identity search)
+- **ULissy**: The language (implementation)
 - **gns-runtime**: The runtime (execution)
 - **gns-crypto-core**: The foundation (security)
 - **Tauri**: The delivery (platforms)
+
+The architecture spans from cryptographic proof to spatial discovery: TrIP proves you exist, GNS names you, TrIP Search makes you discoverable, and ULissy makes it all natural to build. The search layer — documented in the companion *TrIP Search Whitepaper* — completes the ecosystem by providing privacy-preserving discovery over the spatial-identity graph, where every result is ranked by cryptographic trust rather than advertising spend.
 
 The era of moving machines requires a language that moves with them.
 
@@ -807,7 +893,7 @@ after       within      timeout     budget      send        to
 from        as          with        return      throw       throws
 async       await       import      export      public      private
 internal    true        false       nil         self        Self
-default
+default     search      nearby      ranked      by
 ```
 
 ## Appendix B: Operators
@@ -848,10 +934,14 @@ within      near        distance    intersects
 0b1010          // Binary
 
 // Units
-500.meters
-2.kilometers
-10.minutes
-24.hours
+500.meters              // Distance
+2.kilometers            // Distance
+500.m                   // Distance (abbreviation)
+5.km                    // Distance (abbreviation)
+10.minutes              // Duration
+24.hours                // Duration
+1.hour                  // Duration (singular)
+30.min                  // Duration (abbreviation)
 80.percent
 
 // Strings
@@ -891,15 +981,17 @@ pay@merchant
 | After | `after delay { }` | `after 5.seconds { }` |
 | Send | `send to recipient { }` | `send to @alice { msg: "hi" }` |
 | If | `if cond { } else { }` | `if x > 0 { } else { }` |
+| If Let | `if let name = optional { } else { }` | `if let peer = alice { print(peer.handle) }` |
 | Match | `match expr { cases }` | `match status { case ok: { } default: { } }` |
 | For | `for item in collection { }` | `for bc in trajectory { }` |
+| Search | `let r = search target filters ranking` | `let r = search nearby where trust > 0.5 ranked by distance` |
 | Return | `return expr` | `return result` |
 | Import | `import path` | `import ulissy.spatial` |
 
 ---
 
-**Document Version**: 0.3.2
-**Last Updated**: February 2025
+**Document Version**: 0.4.2
+**Last Updated**: February 2026
 **Authors**: GNS Foundation
 **License**: MIT
 

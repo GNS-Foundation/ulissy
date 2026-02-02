@@ -279,12 +279,23 @@ impl TypeContext {
             // Distance units
             (Type::Int, "meters") | (Type::Float, "meters") => Some(Type::Distance),
             (Type::Int, "kilometers") | (Type::Float, "kilometers") => Some(Type::Distance),
+            (Type::Int, "meter") | (Type::Float, "meter") => Some(Type::Distance),
+            (Type::Int, "kilometer") | (Type::Float, "kilometer") => Some(Type::Distance),
+            (Type::Int, "km") | (Type::Float, "km") => Some(Type::Distance),
+            (Type::Int, "m") | (Type::Float, "m") => Some(Type::Distance),
             
             // Duration units
             (Type::Int, "seconds") | (Type::Float, "seconds") => Some(Type::Duration),
             (Type::Int, "minutes") | (Type::Float, "minutes") => Some(Type::Duration),
             (Type::Int, "hours") | (Type::Float, "hours") => Some(Type::Duration),
             (Type::Int, "days") | (Type::Float, "days") => Some(Type::Duration),
+            (Type::Int, "second") | (Type::Float, "second") => Some(Type::Duration),
+            (Type::Int, "minute") | (Type::Float, "minute") => Some(Type::Duration),
+            (Type::Int, "hour") | (Type::Float, "hour") => Some(Type::Duration),
+            (Type::Int, "day") | (Type::Float, "day") => Some(Type::Duration),
+            (Type::Int, "hr") | (Type::Float, "hr") => Some(Type::Duration),
+            (Type::Int, "sec") | (Type::Float, "sec") => Some(Type::Duration),
+            (Type::Int, "min") | (Type::Float, "min") => Some(Type::Duration),
             
             // Percentage
             (Type::Int, "percent") | (Type::Float, "percent") => Some(Type::BatteryLevel),

@@ -9,7 +9,7 @@ use std::fmt;
 // ============================================================================
 
 /// The root of an ULissy program
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }
@@ -18,7 +18,7 @@ pub struct Program {
 // STATEMENTS
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     /// identity me = Keychain.primary
     IdentityDecl(IdentityDecl),
@@ -55,6 +55,9 @@ pub enum Statement {
     
     /// if condition { ... } else { ... }
     IfStatement(IfStatement),
+
+    /// if let binding = optional_expr { ... } else { ... }
+    IfLetStatement(IfLetStatement),
     
     /// match expr { cases }
     MatchStatement(MatchStatement),
@@ -83,7 +86,7 @@ pub enum Statement {
 // ============================================================================
 
 /// identity me = Keychain.primary
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IdentityDecl {
     pub name: String,
     pub initializer: Expression,
@@ -91,7 +94,7 @@ pub struct IdentityDecl {
 }
 
 /// let x = expr  OR  let x: Type = expr
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LetDecl {
     pub name: String,
     pub type_annotation: Option<TypeExpr>,
@@ -100,7 +103,7 @@ pub struct LetDecl {
 }
 
 /// var x = expr
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VarDecl {
     pub name: String,
     pub type_annotation: Option<TypeExpr>,
@@ -109,7 +112,7 @@ pub struct VarDecl {
 }
 
 /// const X = expr
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConstDecl {
     pub name: String,
     pub type_annotation: Option<TypeExpr>,
@@ -118,7 +121,7 @@ pub struct ConstDecl {
 }
 
 /// fn name(params) -> ReturnType { body }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FnDecl {
     pub name: String,
     pub params: Vec<Parameter>,
@@ -129,7 +132,7 @@ pub struct FnDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: String,
     pub type_expr: TypeExpr,
@@ -137,7 +140,7 @@ pub struct Parameter {
 }
 
 /// type Name { fields }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypeDecl {
     pub name: String,
     pub fields: Vec<FieldDecl>,
@@ -145,7 +148,7 @@ pub struct TypeDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldDecl {
     pub name: String,
     pub type_expr: TypeExpr,
@@ -165,7 +168,7 @@ pub struct FieldDecl {
 ///     manual
 /// }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EnumDecl {
     /// The enum name (e.g., "LocationSource")
     pub name: String,
@@ -184,7 +187,7 @@ pub struct EnumDecl {
 ///
 /// Simple: `gps`
 /// With value: `ok(T)` or `point(x: Int, y: Int)`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {
     /// Variant name (e.g., "gps", "ok")
     pub name: String,
@@ -224,7 +227,7 @@ impl fmt::Display for EnumDecl {
 // ============================================================================
 
 /// every 10.minutes when condition { ... }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EveryBlock {
     pub interval: Expression,
     pub condition: Option<Expression>,
@@ -233,7 +236,7 @@ pub struct EveryBlock {
 }
 
 /// when condition { ... }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WhenBlock {
     pub condition: Expression,
     pub body: Block,
@@ -241,7 +244,7 @@ pub struct WhenBlock {
 }
 
 /// after 5.seconds { ... }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AfterBlock {
     pub delay: Expression,
     pub body: Block,
@@ -253,7 +256,7 @@ pub struct AfterBlock {
 // ============================================================================
 
 /// send to @handle { message: "..." }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SendStatement {
     pub recipient: Expression,
     pub fields: Vec<(String, Expression)>,
@@ -265,7 +268,7 @@ pub struct SendStatement {
 // ============================================================================
 
 /// if condition { ... } else { ... }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IfStatement {
     pub condition: Expression,
     pub then_branch: Block,
@@ -273,28 +276,44 @@ pub struct IfStatement {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+/// if let binding = optional_expr { ... } else { ... }
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfLetStatement {
+    /// The variable name to bind
+    pub binding: String,
+    /// The expression to unwrap (must be Optional<T>)
+    pub value: Expression,
+    /// Block executed when value is Some
+    pub then_branch: Block,
+    /// Optional else block
+    pub else_branch: Option<Box<ElseBranch>>,
+    /// Source location
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ElseBranch {
     ElseIf(IfStatement),
+    ElseIfLet(IfLetStatement),
     Else(Block),
 }
 
 /// match expr { case pattern: body, ... }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MatchStatement {
     pub subject: Expression,
     pub cases: Vec<MatchCase>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MatchCase {
     pub pattern: Pattern,
     pub guard: Option<Expression>,
     pub body: Block,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Identifier(String),
     Literal(Literal),
@@ -304,14 +323,14 @@ pub enum Pattern {
 }
 
 /// return expr
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReturnStatement {
     pub value: Option<Expression>,
     pub span: Span,
 }
 
 /// import ulissy.spatial
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImportStatement {
     pub path: Vec<String>,
     pub alias: Option<String>,
@@ -319,7 +338,7 @@ pub struct ImportStatement {
 }
 
 /// for item in collection { body }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ForStatement {
     /// Loop variable name
     pub variable: String,
@@ -345,14 +364,14 @@ pub struct ForStatement {
 ///     minBreadcrumbsPerEpoch: 100
 /// }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConfigBlock {
     pub fields: Vec<ConfigField>,
     pub span: Span,
 }
 
 /// A single field in a config block
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConfigField {
     pub name: String,
     pub value: Expression,
@@ -374,7 +393,7 @@ pub struct ConfigField {
 /// 
 /// computed total: Int = items.count
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComputedPropertyDecl {
     pub name: String,
     pub type_annotation: TypeExpr,
@@ -383,7 +402,7 @@ pub struct ComputedPropertyDecl {
 }
 
 /// Body of a computed property declaration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ComputedBody {
     /// Single expression: computed x: Int = a + b
     Expression(Expression),
@@ -395,7 +414,7 @@ pub enum ComputedBody {
 // EXPRESSIONS
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     /// Literal values: 42, 3.14, "hello", true
     Literal(Literal),
@@ -474,9 +493,12 @@ pub enum Expression {
     
     /// Assignment expression: x = expr
     Assignment(Box<AssignmentExpr>),
+    
+    /// Search expression: search nearby where ...
+    Search(Box<SearchExpr>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BinaryExpr {
     pub left: Expression,
     pub operator: BinaryOp,
@@ -522,7 +544,7 @@ impl fmt::Display for BinaryOp {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnaryExpr {
     pub operator: UnaryOp,
     pub operand: Expression,
@@ -535,27 +557,27 @@ pub enum UnaryOp {
     Not,    // !x
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MemberExpr {
     pub object: Expression,
     pub member: String,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CallExpr {
     pub callee: Expression,
     pub arguments: Vec<Argument>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Argument {
     pub label: Option<String>,
     pub value: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MethodCallExpr {
     pub object: Expression,
     pub method: String,
@@ -569,7 +591,7 @@ pub struct MethodCallExpr {
 /// 
 /// Semantics: If the object is None/nil, the entire expression evaluates
 /// to None. Otherwise, access the member as normal.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OptionalMemberExpr {
     /// The object being accessed (may be optional)
     pub object: Expression,
@@ -585,7 +607,7 @@ pub struct OptionalMemberExpr {
 /// 
 /// Semantics: If the object is None/nil, the entire expression evaluates
 /// to None without calling the method. Otherwise, call the method.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OptionalMethodCallExpr {
     /// The object on which to call the method (may be optional)
     pub object: Expression,
@@ -603,7 +625,7 @@ pub struct OptionalMethodCallExpr {
 /// 
 /// Semantics: If expr is None/nil, return default. Otherwise return expr.
 /// This is equivalent to Rust's `.unwrap_or()` or Swift's `??`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NilCoalescingExpr {
     /// The primary expression (may be None)
     pub primary: Expression,
@@ -616,7 +638,7 @@ pub struct NilCoalescingExpr {
 /// Object literal expression: { field1: value1, field2: value2, ... }
 ///
 /// Example: `{ x: 10, y: 20, name: "point" }`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ObjectLiteralExpr {
     /// The fields of the object
     pub fields: Vec<ObjectField>,
@@ -629,7 +651,7 @@ pub struct ObjectLiteralExpr {
 }
 
 /// A single field in an object literal
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ObjectField {
     /// Field name
     pub name: String,
@@ -699,7 +721,7 @@ impl std::fmt::Display for ObjectLiteralExpr {
 /// Interpolated string expression
 ///
 /// Example: "Hello, \(name)! You have \(count) messages."
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InterpolatedStringExpr {
     /// The parts of the string (literals and expressions)
     pub parts: Vec<InterpolatedPart>,
@@ -709,7 +731,7 @@ pub struct InterpolatedStringExpr {
 }
 
 /// A part of an interpolated string
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InterpolatedPart {
     /// Literal text: "Hello, "
     Literal(String),
@@ -718,21 +740,21 @@ pub enum InterpolatedPart {
     Expression(Expression),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IndexExpr {
     pub object: Expression,
     pub index: Expression,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LambdaExpr {
     pub params: Vec<String>,
     pub body: Expression,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConditionalExpr {
     pub condition: Expression,
     pub then_expr: Expression,
@@ -741,7 +763,7 @@ pub struct ConditionalExpr {
 }
 
 /// breadcrumb(cell: here.h3(10), context: sensors.digest, previous: hash)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BreadcrumbExpr {
     pub cell: Expression,
     pub context: Expression,
@@ -750,7 +772,7 @@ pub struct BreadcrumbExpr {
 }
 
 /// 10.minutes, 500.meters, 80.percent
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnitValueExpr {
     pub value: Expression,
     pub unit: String,
@@ -758,7 +780,7 @@ pub struct UnitValueExpr {
 }
 
 /// Assignment expression: target = value
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AssignmentExpr {
     /// The target of the assignment (identifier or member access)
     pub target: Expression,
@@ -769,10 +791,85 @@ pub struct AssignmentExpr {
 }
 
 // ============================================================================
+// SEARCH PRIMITIVES
+// ============================================================================
+
+/// search nearby where trust > 0.5 ranked by trust desc
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchExpr {
+    pub target: SearchTarget,
+    pub filters: Vec<SearchFilter>,
+    pub ranking: Option<SearchRanking>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SearchTarget {
+    /// search nearby(500.meters) — spatial discovery relative to current location
+    Nearby { radius: Option<Expression> },
+    
+    /// search within(location, 2.kilometers) — spatial around specific point
+    Within { center: Box<Expression>, radius: Box<Expression> },
+    
+    /// search @alice — direct identity/facet lookup
+    Identity { handle: Box<Expression> },
+    
+    /// search "electrician" — text/semantic search
+    Text { query: Box<Expression> },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SearchFilter {
+    /// trust > 3.0 — trust threshold with comparison operator
+    TrustThreshold { op: ComparisonOp, value: Expression },
+    
+    /// facet == "medical" — match specific facet type
+    FacetMatch { facet_name: Expression },
+    
+    /// active within 1.hours — temporal activity filter
+    ActiveWithin { duration: Expression },
+    
+    /// org == "hospital_network" — organization membership
+    OrgMatch { org_name: Expression },
+    
+    /// Generic field comparison (backward compatible with existing code)
+    FieldCompare { field: String, op: ComparisonOp, value: Expression },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ComparisonOp {
+    Equal,
+    NotEqual,
+    Greater,
+    Less,
+    GreaterEqual,
+    LessEqual,
+    Contains,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SearchRanking {
+    /// ranked by trust — TrustRank score (40% weight default)
+    Trust { order: SortOrder },
+    /// ranked by distance — closest first
+    Distance { order: SortOrder },
+    /// ranked by recency — most recently active
+    Recency { order: SortOrder },
+    /// ranked by relevance — composite TrustRank (default)
+    Relevance { order: SortOrder },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SortOrder {
+    Ascending,
+    Descending,
+}
+
+// ============================================================================
 // LITERALS
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Int(i64),
     Float(f64),
@@ -785,7 +882,7 @@ pub enum Literal {
 // TYPES
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeExpr {
     /// Simple type: Int, String, Handle
     Simple(String),
@@ -806,7 +903,7 @@ pub enum TypeExpr {
     Union(Vec<TypeExpr>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WhereClause {
     pub expression: Expression,
 }
@@ -815,7 +912,7 @@ pub struct WhereClause {
 // BLOCK
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     pub statements: Vec<Statement>,
     pub span: Span,
@@ -825,7 +922,7 @@ pub struct Block {
 // SOURCE LOCATION
 // ============================================================================
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Span {
     pub start_line: usize,
     pub start_column: usize,

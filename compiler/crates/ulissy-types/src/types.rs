@@ -56,6 +56,15 @@ pub enum Type {
     Envelope(Box<Type>),
     GnsRecord,
     
+    // === SEARCH TYPES ===
+    TrustScore,
+    SearchResult,
+    SearchResultSet,
+    PresenceProof,
+    SearchQuery,
+    SpatialFilter,
+    IdentityFilter,
+    
     // === FACET TYPES ===
     FacetAddress,
     
@@ -116,7 +125,8 @@ impl Type {
         match (self, other) {
             // Int can be promoted to Float
             (Type::Float, Type::Int) => true,
-            // Optional can accept non-optional
+            // Optional can accept non-optional AND Nil
+            (Type::Optional(inner), Type::Nil) => true,
             (Type::Optional(inner), other) => inner.is_assignable_from(other),
             // Array covariance
             (Type::Array(a), Type::Array(b)) => a.is_assignable_from(b),
@@ -172,7 +182,12 @@ impl Type {
                 let is_compat = (self.is_numeric() && other.is_numeric()) ||
                                 (*self == Type::Moment && *other == Type::Moment) ||
                                 (*self == Type::Duration && *other == Type::Duration) ||
-                                (*self == Type::Distance && *other == Type::Distance);
+                                (*self == Type::Moment && *other == Type::Moment) ||
+                                (*self == Type::Duration && *other == Type::Duration) ||
+                                (*self == Type::Distance && *other == Type::Distance) ||
+                                (*self == Type::TrustScore && *other == Type::Float) ||
+                                (*self == Type::Float && *other == Type::TrustScore) ||
+                                (*self == Type::TrustScore && *other == Type::TrustScore);
                 
                 if is_compat {
                     Some(Type::Bool)
@@ -243,6 +258,11 @@ impl fmt::Display for Type {
             Type::Trajectory => write!(f, "Trajectory"),
             Type::Envelope(inner) => write!(f, "Envelope<{}>", inner),
             Type::GnsRecord => write!(f, "GnsRecord"),
+            Type::TrustScore => write!(f, "TrustScore"),
+            Type::SearchResult => write!(f, "SearchResult"),
+            Type::SearchResultSet => write!(f, "SearchResultSet"),
+            Type::PresenceProof => write!(f, "PresenceProof"),
+            Type::SearchQuery => write!(f, "SearchQuery"),
             Type::FacetAddress => write!(f, "FacetAddress"),
             Type::Unit => write!(f, "()"),
             Type::Any => write!(f, "Any"),
@@ -258,6 +278,8 @@ impl fmt::Display for Type {
                 }
                 write!(f, " }}")
             }
+            Type::SpatialFilter => write!(f, "SpatialFilter"),
+            Type::IdentityFilter => write!(f, "IdentityFilter"),
         }
     }
 }
@@ -343,6 +365,14 @@ pub enum TypedStatementKind {
     
     IfStatement {
         condition: TypedExpr,
+        then_block: Vec<TypedStatement>,
+        else_block: Option<Vec<TypedStatement>>,
+    },
+
+    IfLetStatement {
+        binding: String,
+        binding_type: Type,
+        value: TypedExpr,
         then_block: Vec<TypedStatement>,
         else_block: Option<Vec<TypedStatement>>,
     },
@@ -471,6 +501,13 @@ pub enum TypedExprKind {
     InterpolatedString {
         parts: Vec<TypedInterpolatedPart>,
     },
+    
+    /// Search: search nearby ...
+    Search {
+        target: TypedSearchTarget,
+        filters: Vec<TypedSearchFilter>,
+        ranking: Option<TypedSearchRanking>,
+    },
 }
 
 /// A typed object field
@@ -517,4 +554,33 @@ impl Symbol {
             initialized: true,
         }
     }
+}
+
+// ============================================================================
+// TYPED SEARCH PRIMITIVES
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub enum TypedSearchTarget {
+    Nearby { radius: Option<Box<TypedExpr>> },
+    Within { center: Box<TypedExpr>, radius: Box<TypedExpr> },
+    Identity { handle: Box<TypedExpr> },
+    Text { query: Box<TypedExpr> },
+}
+
+#[derive(Debug, Clone)]
+pub enum TypedSearchFilter {
+    TrustThreshold { op: ast::ComparisonOp, value: Box<TypedExpr> },
+    FacetMatch { facet_name: Box<TypedExpr> },
+    ActiveWithin { duration: Box<TypedExpr> },
+    OrgMatch { org_name: Box<TypedExpr> },
+    FieldCompare { field: String, op: ast::ComparisonOp, value: Box<TypedExpr> },
+}
+
+#[derive(Debug, Clone)]
+pub enum TypedSearchRanking {
+    Trust { order: ast::SortOrder },
+    Distance { order: ast::SortOrder },
+    Recency { order: ast::SortOrder },
+    Relevance { order: ast::SortOrder },
 }

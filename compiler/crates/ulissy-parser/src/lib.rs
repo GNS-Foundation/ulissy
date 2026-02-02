@@ -521,10 +521,15 @@ impl Parser {
         }))
     }
 
-    /// if condition { ... } else { ... }
+    /// if condition { ... } else { ... } OR if let binding = expr { ... }
     fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::If)?;
+        
+        // Check for "if let" — optional binding
+        if self.check(TokenKind::Let) {
+            return self.parse_if_let_statement(start);
+        }
         
         let condition = self.parse_expression()?;
         let then_branch = self.parse_block()?;
@@ -532,12 +537,12 @@ impl Parser {
         let else_branch = if self.check(TokenKind::Else) {
             self.advance();
             if self.check(TokenKind::If) {
-                Some(Box::new(ElseBranch::ElseIf(
-                    match self.parse_if_statement()? {
-                        Statement::IfStatement(if_stmt) => if_stmt,
-                        _ => unreachable!(),
-                    }
-                )))
+                // else if ... OR else if let ...
+                Some(Box::new(match self.parse_if_statement()? {
+                    Statement::IfStatement(if_stmt) => ElseBranch::ElseIf(if_stmt),
+                    Statement::IfLetStatement(if_let) => ElseBranch::ElseIfLet(if_let),
+                    _ => unreachable!(),
+                }))
             } else {
                 Some(Box::new(ElseBranch::Else(self.parse_block()?)))
             }
@@ -547,6 +552,39 @@ impl Parser {
         
         Ok(Statement::IfStatement(IfStatement {
             condition,
+            then_branch,
+            else_branch,
+            span: start,
+        }))
+    }
+    
+    /// Parse: if let <binding> = <expr> { ... } else { ... }
+    fn parse_if_let_statement(&mut self, start: Span) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Let)?;
+        
+        let binding = self.expect_identifier()?;
+        self.expect(TokenKind::Equal)?;
+        let value = self.parse_expression()?;
+        let then_branch = self.parse_block()?;
+        
+        let else_branch = if self.check(TokenKind::Else) {
+            self.advance();
+            if self.check(TokenKind::If) {
+                Some(Box::new(match self.parse_if_statement()? {
+                    Statement::IfStatement(if_stmt) => ElseBranch::ElseIf(if_stmt),
+                    Statement::IfLetStatement(if_let) => ElseBranch::ElseIfLet(if_let),
+                    _ => unreachable!(),
+                }))
+            } else {
+                Some(Box::new(ElseBranch::Else(self.parse_block()?)))
+            }
+        } else {
+            None
+        };
+        
+        Ok(Statement::IfLetStatement(IfLetStatement {
+            binding,
+            value,
             then_branch,
             else_branch,
             span: start,
@@ -1201,6 +1239,10 @@ impl Parser {
             Some(TokenKind::If) => {
                 self.parse_if_expression()
             }
+            // Handle search expression: search nearby ...
+            Some(TokenKind::Search) => {
+                self.parse_search_expression()
+            }
             _ => Err(self.error("Expected expression")),
         }
     }
@@ -1370,6 +1412,197 @@ impl Parser {
                 Ok("internal".to_string())
             }
             _ => Err(self.error("Expected identifier")),
+        }
+    }
+
+    // ========================================================================
+    // SEARCH PARSING
+    // ========================================================================
+
+    /// Parse search expression: search nearby where ... ranked by ...
+    fn parse_search_expression(&mut self) -> Result<Expression, ParseError> {
+        let span = self.current_span();
+        self.expect(TokenKind::Search)?;
+        
+        // Parse target
+        let target = match self.peek_kind() {
+            // search nearby  OR  search nearby(500.meters)
+            Some(TokenKind::Nearby) => {
+                self.advance();
+                let radius = if self.check(TokenKind::LeftParen) {
+                    self.advance();
+                    let expr = self.parse_expression()?;
+                    self.expect(TokenKind::RightParen)?;
+                    Some(expr)
+                } else {
+                    None
+                };
+                SearchTarget::Nearby { radius }
+            }
+            
+            // search within(location, distance)
+            Some(TokenKind::Within) => {
+                self.advance();
+                self.expect(TokenKind::LeftParen)?;
+                let center = self.parse_expression()?;
+                self.expect(TokenKind::Comma)?;
+                let radius = self.parse_expression()?;
+                self.expect(TokenKind::RightParen)?;
+                SearchTarget::Within {
+                    center: Box::new(center),
+                    radius: Box::new(radius),
+                }
+            }
+            
+            // search @alice  OR  search dix@alice
+            Some(TokenKind::Handle(_)) | Some(TokenKind::FacetAddress(_, _)) => {
+                let handle_expr = self.parse_expression()?;
+                SearchTarget::Identity {
+                    handle: Box::new(handle_expr),
+                }
+            }
+            
+            // search "electrician"
+            Some(TokenKind::StringLiteral(_)) => {
+                let query_expr = self.parse_expression()?;
+                SearchTarget::Text {
+                    query: Box::new(query_expr),
+                }
+            }
+            
+            _ => {
+                return Err(self.error(
+                    "Expected search target: nearby, within(center, radius), @handle, or \"text\""
+                ));
+            }
+        };
+        
+        // Parse filters: where ...
+        let filters = if self.check(TokenKind::Where) {
+            self.parse_search_filters()?
+        } else {
+            Vec::new()
+        };
+        
+        // Parse ranking: ranked by trust desc
+        let ranking = if self.check(TokenKind::Ranked) {
+            Some(self.parse_search_ranking()?)
+        } else {
+            None
+        };
+        
+        Ok(Expression::Search(Box::new(SearchExpr {
+            target,
+            filters,
+            ranking,
+            span,
+        })))
+    }
+
+    fn parse_search_filters(&mut self) -> Result<Vec<SearchFilter>, ParseError> {
+        self.expect(TokenKind::Where)?;
+        let mut filters = Vec::new();
+        
+        loop {
+            let filter = self.parse_single_search_filter()?;
+            filters.push(filter);
+            
+            if self.check(TokenKind::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        
+        Ok(filters)
+    }
+    
+    fn parse_single_search_filter(&mut self) -> Result<SearchFilter, ParseError> {
+        // Check for semantic filter keywords
+        match self.peek_kind() {
+            Some(TokenKind::Identifier(ref s)) if s == "trust" => {
+                self.advance();
+                let op = self.parse_search_comparison_op()?;
+                let value = self.parse_expression()?;
+                Ok(SearchFilter::TrustThreshold { op, value })
+            }
+            
+            Some(TokenKind::Identifier(ref s)) if s == "facet" => {
+                self.advance();
+                self.expect(TokenKind::EqualEqual)?;
+                let facet_name = self.parse_expression()?;
+                Ok(SearchFilter::FacetMatch { facet_name })
+            }
+            
+            Some(TokenKind::Identifier(ref s)) if s == "active" => {
+                self.advance();
+                self.expect(TokenKind::Within)?;
+                let duration = self.parse_expression()?;
+                Ok(SearchFilter::ActiveWithin { duration })
+            }
+            
+            Some(TokenKind::Identifier(ref s)) if s == "org" => {
+                self.advance();
+                self.expect(TokenKind::EqualEqual)?;
+                let org_name = self.parse_expression()?;
+                Ok(SearchFilter::OrgMatch { org_name })
+            }
+            
+            // Fallback: generic field op value (backward compatible)
+            _ => {
+                let field = self.expect_identifier()?;
+                let op = self.parse_search_comparison_op()?;
+                let value = self.parse_expression()?;
+                Ok(SearchFilter::FieldCompare { field, op, value })
+            }
+        }
+    }
+    
+    fn parse_search_comparison_op(&mut self) -> Result<ComparisonOp, ParseError> {
+        let op = match self.peek_kind() {
+            Some(TokenKind::EqualEqual) => ComparisonOp::Equal,
+            Some(TokenKind::NotEqual) => ComparisonOp::NotEqual,
+            Some(TokenKind::Greater) => ComparisonOp::Greater,
+            Some(TokenKind::Less) => ComparisonOp::Less,
+            Some(TokenKind::GreaterEqual) => ComparisonOp::GreaterEqual,
+            Some(TokenKind::LessEqual) => ComparisonOp::LessEqual,
+            _ => return Err(self.error("Expected comparison operator (>, >=, <, <=, ==, !=)")),
+        };
+        self.advance();
+        Ok(op)
+    }
+
+    fn parse_search_ranking(&mut self) -> Result<SearchRanking, ParseError> {
+        self.expect(TokenKind::Ranked)?;
+        self.expect(TokenKind::By)?;
+        
+        let field = self.expect_identifier()?;
+        
+        // Parse optional order (default: descending)
+        let order = if let Some(TokenKind::Identifier(ref s)) = self.peek_kind() {
+            match s.as_str() {
+                "asc" | "ascending" => {
+                    self.advance();
+                    SortOrder::Ascending
+                }
+                "desc" | "descending" => {
+                    self.advance();
+                    SortOrder::Descending
+                }
+                _ => SortOrder::Descending,
+            }
+        } else {
+            SortOrder::Descending
+        };
+        
+        match field.as_str() {
+            "trust" => Ok(SearchRanking::Trust { order }),
+            "distance" => Ok(SearchRanking::Distance { order }),
+            "recency" | "age" => Ok(SearchRanking::Recency { order }),
+            "relevance" => Ok(SearchRanking::Relevance { order }),
+            _ => Err(self.error(
+                &format!("Unknown ranking key '{}'. Expected: trust, distance, recency, relevance", field)
+            )),
         }
     }
 

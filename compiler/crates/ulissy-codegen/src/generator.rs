@@ -147,6 +147,7 @@ edition = "2021"
 
 [dependencies]
 gns-runtime = {{ path = "../../../gns-runtime" }}
+gns-search = {{ path = "../../../gns-search" }}
 tokio = {{ version = "1", features = ["full"] }}
 thiserror = "1.0"
 
@@ -205,6 +206,9 @@ hex = "0.4"
             }
             TypedStatementKind::IfStatement { condition, then_block, else_block } => {
                 self.generate_if_statement(condition, then_block, else_block)
+            }
+            TypedStatementKind::IfLetStatement { binding, binding_type: _, value, then_block, else_block } => {
+                self.generate_if_let_statement(binding, value, then_block, else_block)
             }
             TypedStatementKind::ForStatement { item_name, collection, body } => {
                 self.generate_for_statement(item_name, collection, body)
@@ -809,6 +813,40 @@ hex = "0.4"
         Ok(())
     }
     
+    fn generate_if_let_statement(
+        &mut self,
+        binding: &str,
+        value: &TypedExpr,
+        then_block: &[TypedStatement],
+        else_block: &Option<Vec<TypedStatement>>,
+    ) -> Result<(), CodeGenError> {
+        let value_code = self.generate_expression(value)?;
+        let rust_binding = self.map_identifier(&to_snake_case(binding));
+        
+        self.emitter.emit_line(&format!("if let Some({}) = {} {{", rust_binding, value_code));
+        self.emitter.indent();
+        
+        for stmt in then_block {
+            self.generate_statement(stmt)?;
+        }
+        
+        self.emitter.dedent();
+        
+        if let Some(else_stmts) = else_block {
+            self.emitter.emit_line("} else {");
+            self.emitter.indent();
+            
+            for stmt in else_stmts {
+                self.generate_statement(stmt)?;
+            }
+            
+            self.emitter.dedent();
+        }
+        
+        self.emitter.emit_line("}");
+        Ok(())
+    }
+
     fn generate_for_statement(
         &mut self,
         item_name: &str,
@@ -1269,11 +1307,12 @@ hex = "0.4"
                 let val = self.generate_expression(value)?;
                 match unit.as_str() {
                     "milliseconds" => Ok(format!("std::time::Duration::from_millis({})", val)),
-                    "seconds" => Ok(format!("std::time::Duration::from_secs({})", val)),
-                    "minutes" => Ok(format!("std::time::Duration::from_secs(({}) * 60)", val)),
-                    "hours" => Ok(format!("std::time::Duration::from_secs(({}) * 3600)", val)),
-                    "days" => Ok(format!("std::time::Duration::from_secs(({}) * 86400)", val)),
-                    "meters" => Ok(format!("Distance::from_meters({})", val)),
+                    "seconds" | "second" | "sec" => Ok(format!("std::time::Duration::from_secs({})", val)),
+                    "minutes" | "minute" | "min" => Ok(format!("std::time::Duration::from_secs(({}) * 60)", val)),
+                    "hours" | "hour" | "hr" => Ok(format!("std::time::Duration::from_secs(({}) * 3600)", val)),
+                    "days" | "day" => Ok(format!("std::time::Duration::from_secs(({}) * 86400)", val)),
+                    "meters" | "meter" | "m" => Ok(format!("Distance::from_meters({})", val)),
+                    "kilometers" | "kilometer" | "km" => Ok(format!("Distance::from_meters(({}) * 1000.0)", val)),
                     _ => Ok(format!("{}::from({})", unit, val))
                 }
             }
@@ -1344,7 +1383,120 @@ hex = "0.4"
             TypedExprKind::InterpolatedString { parts } => {
                 self.generate_interpolated_string(parts)
             }
+            
+            TypedExprKind::Search { target, filters, ranking } => {
+                self.generate_search_expression(target, filters, ranking)
+            }
         }
+    }
+    
+    fn generate_search_expression(
+        &self,
+        target: &ulissy_types::TypedSearchTarget,
+        filters: &[ulissy_types::TypedSearchFilter],
+        ranking: &Option<ulissy_types::TypedSearchRanking>,
+    ) -> Result<String, CodeGenError> {
+        let mut code = String::from("gns_search::query()");
+        
+        // --- Target ---
+        match target {
+            ulissy_types::TypedSearchTarget::Nearby { radius } => {
+                if let Some(r) = radius {
+                    let radius_code = self.generate_expression(r)?;
+                    code.push_str(&format!("\n        .nearby({})", radius_code));
+                } else {
+                    code.push_str("\n        .nearby_default()");
+                }
+            }
+            ulissy_types::TypedSearchTarget::Within { center, radius } => {
+                let center_code = self.generate_expression(center)?;
+                let radius_code = self.generate_expression(radius)?;
+                code.push_str(&format!("\n        .within({}, {})", center_code, radius_code));
+            }
+            ulissy_types::TypedSearchTarget::Identity { handle } => {
+                let handle_code = self.generate_expression(handle)?;
+                code.push_str(&format!("\n        .identity({})", handle_code));
+            }
+            ulissy_types::TypedSearchTarget::Text { query } => {
+                let query_code = self.generate_expression(query)?;
+                code.push_str(&format!("\n        .text({})", query_code));
+            }
+        }
+        
+        // --- Filters ---
+        for filter in filters {
+            match filter {
+                ulissy_types::TypedSearchFilter::TrustThreshold { op, value } => {
+                    let val = self.generate_expression(value)?;
+                    match op {
+                        ast::ComparisonOp::Greater | ast::ComparisonOp::GreaterEqual => {
+                            code.push_str(&format!("\n        .trust_min({})", val));
+                        }
+                        ast::ComparisonOp::Less | ast::ComparisonOp::LessEqual => {
+                            code.push_str(&format!("\n        .trust_max({})", val));
+                        }
+                        ast::ComparisonOp::Equal => {
+                            code.push_str(&format!("\n        .trust_exact({})", val));
+                        }
+                        _ => {
+                            code.push_str(&format!("\n        .trust_min({})", val));
+                        }
+                    }
+                }
+                ulissy_types::TypedSearchFilter::FacetMatch { facet_name } => {
+                    let name = self.generate_expression(facet_name)?;
+                    code.push_str(&format!("\n        .facet({})", name));
+                }
+                ulissy_types::TypedSearchFilter::ActiveWithin { duration } => {
+                    let dur = self.generate_expression(duration)?;
+                    code.push_str(&format!("\n        .active_within({})", dur));
+                }
+                ulissy_types::TypedSearchFilter::OrgMatch { org_name } => {
+                    let org = self.generate_expression(org_name)?;
+                    code.push_str(&format!("\n        .org({})", org));
+                }
+                ulissy_types::TypedSearchFilter::FieldCompare { field, op, value } => {
+                    let val = self.generate_expression(value)?;
+                    let op_str = match op {
+                        ast::ComparisonOp::Greater => "Gt",
+                        ast::ComparisonOp::GreaterEqual => "Ge",
+                        ast::ComparisonOp::Less => "Lt",
+                        ast::ComparisonOp::LessEqual => "Le",
+                        ast::ComparisonOp::Equal => "Eq",
+                        ast::ComparisonOp::NotEqual => "Ne",
+                        ast::ComparisonOp::Contains => "Contains",
+                        _ => "Eq",
+                    };
+                    code.push_str(&format!(
+                        "\n        .filter(\"{}\", gns_search::Op::{}, {})",
+                        field, op_str, val
+                    ));
+                }
+            }
+        }
+        
+        // --- Ranking ---
+        if let Some(rank) = ranking {
+            let (key, order) = match rank {
+                ulissy_types::TypedSearchRanking::Trust { order } => ("Trust", order),
+                ulissy_types::TypedSearchRanking::Distance { order } => ("Distance", order),
+                ulissy_types::TypedSearchRanking::Recency { order } => ("Recency", order),
+                ulissy_types::TypedSearchRanking::Relevance { order } => ("Relevance", order),
+            };
+            let order_str = match order {
+                ast::SortOrder::Ascending => "Asc",
+                ast::SortOrder::Descending => "Desc",
+            };
+            code.push_str(&format!(
+                "\n        .rank_by(gns_search::RankingKey::{}, gns_search::Order::{})",
+                key, order_str
+            ));
+        }
+        
+        // --- Execute ---
+        code.push_str("\n        .execute().await?");
+        
+        Ok(code)
     }
     
     fn generate_object_literal(
@@ -1448,6 +1600,7 @@ hex = "0.4"
             Type::Hash => "Hash".to_string(),
             Type::BatteryLevel => "BatteryLevel".to_string(),
             Type::Breadcrumb => "Breadcrumb".to_string(),
+            Type::PresenceProof => "PresenceProof".to_string(),
             Type::Trajectory => "Trajectory".to_string(),
             Type::FacetAddress => "FacetAddress".to_string(),
             Type::Array(inner) => format!("Vec<{}>", self.type_to_rust(inner)),

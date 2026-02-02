@@ -1,0 +1,49 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// TRIP Search Primitives Test v0.4.1
+// ═══════════════════════════════════════════════════════════════════════════
+
+import ulissy.prelude
+
+fn testAdvancedSearch() {
+    print("Testing v0.4.1 search primitives...")
+
+    // 1. Search Nearby (implicit radius, default 500m) with typed filters
+    let locals = search nearby 
+                 where trust > 0.5, 
+                       active within 1.hours 
+                 ranked by recency desc
+                 
+    print("Found \(locals.count) local active peers")
+
+    // 2. Search Within (explicit center and radius)
+    // `here` resolves to Location::current() which is Coordinates/H3Cell
+    let downtown = here 
+    let remote = search within(downtown, 5.kilometers)
+                 where facet == "medical",
+                       org == "health_net"
+                 ranked by distance asc
+    
+    print("Found \(remote.count) medical providers downtown")
+
+    // 3. Identity Search (returns Optional<SearchResult>)
+    let alice = search @alice
+    
+    // Use if-let or match for optional result
+    if let peer = alice {
+        print("Found Alice: \(peer.handle) at \(peer.distance)m")
+        // Check presence proof members (new feature)
+        let proof = peer.proof
+        print("Proof: \(proof.verification_level) with \(proof.spatial_diversity) diversity")
+    } else {
+        print("Alice not found nearby")
+    }
+
+    // 4. Text Search
+    let electricians = search "electrician"
+                       where trust >= 0.8
+                       ranked by relevance desc
+                       
+    print("Found \(electricians.count) electricians")
+}
+
+testAdvancedSearch()
