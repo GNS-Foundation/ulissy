@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["GNS Foundation <foundation@gns.foundation>"]
 description = "Code generator for the ULissy programming language - emits Rust code"
 license = "MIT"
-repository = "https://github.com/cayerbe/ulissy_program"
+repository = "https://github.com/GNS-Foundation/ulissy"
 keywords = ["codegen", "compiler", "ulissy", "gns", "geospatial"]
 categories = ["compilers"]
 

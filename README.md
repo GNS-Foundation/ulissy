@@ -1,5 +1,11 @@
 # ULissy
 
+[![CI](https://github.com/GNS-Foundation/ulissy/actions/workflows/ci.yml/badge.svg)](https://github.com/GNS-Foundation/ulissy/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-74%2F74-brightgreen)](https://github.com/GNS-Foundation/ulissy/blob/main/examples/trip-protocol/src/trip_tests.ul)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/GNS-Foundation/ulissy/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-0.4.2-purple)](https://github.com/GNS-Foundation/ulissy)
+[![Playground](https://img.shields.io/badge/try%20it-playground-orange)](https://gns-foundation.github.io/ulissy/playground/)
+
 **A Programming Language for Moving Machines**
 
 ULissy is a domain-specific programming language designed for machines that move through physical space — mobile phones, vehicles, drones, wearables, and IoT devices. It treats identity, location, time, cryptography, and energy as first-class language primitives rather than library imports.

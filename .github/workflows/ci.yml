@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Compiler
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          compiler/ulissy/target/
+          compiler/crates/*/target/
+          gns-runtime/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-
+    
+    - name: Build lexer
+      working-directory: compiler/crates/ulissy-lexer
+      run: cargo build --release
+    
+    - name: Build parser
+      working-directory: compiler/crates/ulissy-parser
+      run: cargo build --release
+    
+    - name: Build type checker
+      working-directory: compiler/crates/ulissy-types
+      run: cargo build --release
+    
+    - name: Build code generator
+      working-directory: compiler/crates/ulissy-codegen
+      run: cargo build --release
+    
+    - name: Build CLI
+      working-directory: compiler/ulissy
+      run: cargo build --release
+    
+    - name: Build runtime
+      working-directory: gns-runtime
+      run: cargo build --release
+
+  test:
+    name: TRIP Test Suite
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          compiler/ulissy/target/
+          compiler/crates/*/target/
+          gns-runtime/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-
+    
+    - name: Build compiler
+      working-directory: compiler/ulissy
+      run: cargo build --release
+    
+    - name: Run TRIP protocol tests (74/74)
+      run: ./compiler/ulissy/target/release/ulissy run examples/trip-protocol/src/trip_tests.ul
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+    
+    - name: Check formatting (lexer)
+      working-directory: compiler/crates/ulissy-lexer
+      run: cargo fmt --check
+    
+    - name: Check formatting (parser)
+      working-directory: compiler/crates/ulissy-parser
+      run: cargo fmt --check
+    
+    - name: Check formatting (types)
+      working-directory: compiler/crates/ulissy-types
+      run: cargo fmt --check
+    
+    - name: Check formatting (codegen)
+      working-directory: compiler/crates/ulissy-codegen
+      run: cargo fmt --check
+    
+    - name: Check formatting (CLI)
+      working-directory: compiler/ulissy
+      run: cargo fmt --check
+    
+    - name: Clippy (lexer)
+      working-directory: compiler/crates/ulissy-lexer
+      run: cargo clippy -- -D warnings
+    
+    - name: Clippy (parser)
+      working-directory: compiler/crates/ulissy-parser
+      run: cargo clippy -- -D warnings
+    
+    - name: Clippy (types)
+      working-directory: compiler/crates/ulissy-types
+      run: cargo clippy -- -D warnings
+    
+    - name: Clippy (codegen)
+      working-directory: compiler/crates/ulissy-codegen
+      run: cargo clippy -- -D warnings
+    
+    - name: Clippy (CLI)
+      working-directory: compiler/ulissy
+      run: cargo clippy -- -D warnings

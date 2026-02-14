@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["GNS Foundation <foundation@gns.foundation>"]
 description = "Type checker for the ULissy programming language"
 license = "MIT"
-repository = "https://github.com/cayerbe/ulissy_program"
+repository = "https://github.com/GNS-Foundation/ulissy"
 keywords = ["types", "compiler", "ulissy", "gns", "geospatial"]
 categories = ["compilers"]
 
