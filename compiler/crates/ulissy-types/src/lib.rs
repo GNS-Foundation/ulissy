@@ -2,16 +2,16 @@
 // ULissy Type Checker - Validates AST and enforces type rules
 // Version 0.1.0
 
-pub mod types;
-pub mod context;
 pub mod checker;
+pub mod context;
+pub mod types;
 
-pub use types::*;
-pub use context::*;
 pub use checker::*;
+pub use context::*;
+pub use types::*;
 
-use ulissy_parser::ast;
 use std::fmt;
+use ulissy_parser::ast;
 
 // ============================================================================
 // TYPE ERROR
@@ -26,18 +26,29 @@ pub struct TypeError {
 
 impl TypeError {
     pub fn new(message: &str, span: ast::Span) -> Self {
-        TypeError { message: message.to_string(), hint: None, span }
+        TypeError {
+            message: message.to_string(),
+            hint: None,
+            span,
+        }
     }
-    
+
     pub fn with_hint(message: &str, hint: &str, span: ast::Span) -> Self {
-        TypeError { message: message.to_string(), hint: Some(hint.to_string()), span }
+        TypeError {
+            message: message.to_string(),
+            hint: Some(hint.to_string()),
+            span,
+        }
     }
 }
 
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Type error at line {}, column {}: {}", 
-            self.span.start_line, self.span.start_column, self.message)?;
+        write!(
+            f,
+            "Type error at line {}, column {}: {}",
+            self.span.start_line, self.span.start_column, self.message
+        )?;
         if let Some(hint) = &self.hint {
             write!(f, "\n  hint: {}", hint)?;
         }
@@ -59,11 +70,11 @@ pub fn check(program: &ast::Program) -> Result<TypedProgram, Vec<TypeError>> {
 
 /// Type check ULissy source code
 pub fn check_source(source: &str) -> Result<TypedProgram, String> {
-    let program = ulissy_parser::parse(source)
-        .map_err(|e| e.to_string())?;
-    
+    let program = ulissy_parser::parse(source).map_err(|e| e.to_string())?;
+
     check(&program).map_err(|errors| {
-        errors.iter()
+        errors
+            .iter()
             .map(|e| e.to_string())
             .collect::<Vec<_>>()
             .join("\n")

@@ -13,78 +13,78 @@ use std::str::Chars;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // === KEYWORDS ===
-    Identity,       // identity
-    Let,            // let
-    Var,            // var
-    Const,          // const
-    Fn,             // fn
-    Type,           // type
-    Struct,         // struct
-    Enum,           // enum
-    Trait,          // trait
-    Impl,           // impl
-    If,             // if
-    Else,           // else
-    Match,          // match
-    Case,           // case
-    Guard,          // guard
-    For,            // for
-    While,          // while
-    In,             // in
-    Where,          // where
-    When,           // when
-    Every,          // every
-    After,          // after
-    Within,         // within
-    Timeout,        // timeout
-    Budget,         // budget
-    Send,           // send
-    To,             // to
-    From,           // from
-    As,             // as
-    With,           // with
-    Return,         // return
-    Throw,          // throw
-    Throws,         // throws
-    Async,          // async
-    Await,          // await
-    Import,         // import
-    Export,         // export
-    Public,         // public
-    Private,        // private
-    Internal,       // internal
-    True,           // true
-    False,          // false
-    Nil,            // nil
-    SelfLower,      // self
-    SelfUpper,      // Self
-    Computed,       // computed
-    Invariant,      // invariant
-    Config,         // config
-    Default,        // default
+    Identity,  // identity
+    Let,       // let
+    Var,       // var
+    Const,     // const
+    Fn,        // fn
+    Type,      // type
+    Struct,    // struct
+    Enum,      // enum
+    Trait,     // trait
+    Impl,      // impl
+    If,        // if
+    Else,      // else
+    Match,     // match
+    Case,      // case
+    Guard,     // guard
+    For,       // for
+    While,     // while
+    In,        // in
+    Where,     // where
+    When,      // when
+    Every,     // every
+    After,     // after
+    Within,    // within
+    Timeout,   // timeout
+    Budget,    // budget
+    Send,      // send
+    To,        // to
+    From,      // from
+    As,        // as
+    With,      // with
+    Return,    // return
+    Throw,     // throw
+    Throws,    // throws
+    Async,     // async
+    Await,     // await
+    Import,    // import
+    Export,    // export
+    Public,    // public
+    Private,   // private
+    Internal,  // internal
+    True,      // true
+    False,     // false
+    Nil,       // nil
+    SelfLower, // self
+    SelfUpper, // Self
+    Computed,  // computed
+    Invariant, // invariant
+    Config,    // config
+    Default,   // default
 
     // === SEARCH KEYWORDS ===
-    Search,         // search
-    Nearby,         // nearby
-    Ranked,         // ranked
-    By,             // by
+    Search, // search
+    Nearby, // nearby
+    Ranked, // ranked
+    By,     // by
 
     // === LITERALS ===
     IntLiteral(i64),
     FloatLiteral(f64),
     StringLiteral(String),
-    
+
     // === IDENTIFIERS ===
     Identifier(String),
-    
+
     // === HANDLE & FACETS ===
-    Handle(String),              // @alice
-    FacetAddress(String, String), // dix@alice (prefix, handle)
+    Handle(String),                    // @alice
+    FacetAddress(String, String),      // dix@alice (prefix, handle)
     FacetPath(String, String, String), // home@alice/lights
-    
+
     // === UNITS ===
-    UnitSuffix(String),          // .meters, .minutes, .percent
-    
+    UnitSuffix(String), // .meters, .minutes, .percent
+
     // === OPERATORS ===
     Plus,           // +
     Minus,          // -
@@ -112,28 +112,28 @@ pub enum TokenKind {
     DotDotLess,     // ..<
     Arrow,          // ->
     FatArrow,       // =>
-    
+
     // === DELIMITERS ===
-    LeftParen,      // (
-    RightParen,     // )
-    LeftBrace,      // {
-    RightBrace,     // }
-    LeftBracket,    // [
-    RightBracket,   // ]
-    Comma,          // ,
-    Colon,          // :
-    Semicolon,      // ;
-    Dot,            // .
-    At,             // @
-    
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBrace,    // {
+    RightBrace,   // }
+    LeftBracket,  // [
+    RightBracket, // ]
+    Comma,        // ,
+    Colon,        // :
+    Semicolon,    // ;
+    Dot,          // .
+    At,           // @
+
     // === SPECIAL ===
     Newline,
     EOF,
-    
+
     // === INTERPOLATION ===
     /// Interpolated string: "Hello, \(name)!"
     InterpolatedString(Vec<StringPart>),
-    
+
     // === ERROR ===
     Error(String),
 }
@@ -143,7 +143,7 @@ pub enum TokenKind {
 pub enum StringPart {
     /// Literal text: "Hello, "
     Literal(String),
-    
+
     /// Interpolation placeholder: \(expression)
     Interpolation(String),
 }
@@ -183,7 +183,12 @@ pub struct Token {
 
 impl Token {
     pub fn new(kind: TokenKind, lexeme: String, line: usize, column: usize) -> Self {
-        Token { kind, lexeme, line, column }
+        Token {
+            kind,
+            lexeme,
+            line,
+            column,
+        }
     }
 }
 
@@ -220,14 +225,14 @@ impl<'a> Lexer<'a> {
                 self.scan_token()?;
             }
         }
-        
+
         self.tokens.push(Token::new(
             TokenKind::EOF,
             String::new(),
             self.line,
             self.column,
         ));
-        
+
         Ok(self.tokens)
     }
 
@@ -332,7 +337,7 @@ impl<'a> Lexer<'a> {
             ',' => TokenKind::Comma,
             ';' => TokenKind::Semicolon,
             ':' => TokenKind::Colon,
-            
+
             // Dot and ranges
             '.' => {
                 if self.match_char('.') {
@@ -378,7 +383,7 @@ impl<'a> Lexer<'a> {
                 }
             }
             '%' => TokenKind::Percent,
-            
+
             '=' => {
                 if self.match_char('=') {
                     TokenKind::EqualEqual
@@ -494,7 +499,7 @@ impl<'a> Lexer<'a> {
 
     fn scan_identifier_or_keyword(&mut self, first: char) -> Result<TokenKind, LexerError> {
         let mut ident = String::from(first);
-        
+
         while let Some(c) = self.peek() {
             if c.is_ascii_alphanumeric() || c == '_' {
                 ident.push(c);
@@ -508,17 +513,17 @@ impl<'a> Lexer<'a> {
         if self.peek() == Some('@') {
             let prefix = ident.clone();
             self.advance(); // consume @
-            
+
             if self.peek().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
                 let handle = self.scan_identifier_string();
-                
+
                 // Check for path: dix@alice/something
                 if self.peek() == Some('/') {
                     self.advance(); // consume /
                     let path = self.scan_identifier_string();
                     return Ok(TokenKind::FacetPath(prefix, handle, path));
                 }
-                
+
                 return Ok(TokenKind::FacetAddress(prefix, handle));
             }
         }
@@ -630,7 +635,12 @@ impl<'a> Lexer<'a> {
             if c.is_ascii_digit() {
                 num_str.push(c);
                 self.advance();
-            } else if c == '.' && self.peek_next().map(|n| n.is_ascii_digit()).unwrap_or(false) {
+            } else if c == '.'
+                && self
+                    .peek_next()
+                    .map(|n| n.is_ascii_digit())
+                    .unwrap_or(false)
+            {
                 is_float = true;
                 num_str.push(c);
                 self.advance();
@@ -640,11 +650,13 @@ impl<'a> Lexer<'a> {
         }
 
         if is_float {
-            let value: f64 = num_str.parse()
+            let value: f64 = num_str
+                .parse()
                 .map_err(|_| LexerError::new("Invalid float literal", self.line, self.column))?;
             Ok(TokenKind::FloatLiteral(value))
         } else {
-            let value: i64 = num_str.parse()
+            let value: i64 = num_str
+                .parse()
                 .map_err(|_| LexerError::new("Invalid integer literal", self.line, self.column))?;
             Ok(TokenKind::IntLiteral(value))
         }
@@ -653,22 +665,22 @@ impl<'a> Lexer<'a> {
     fn scan_string(&mut self) -> Result<TokenKind, LexerError> {
         let start_line = self.line;
         let start_column = self.column;
-        
+
         let mut parts: Vec<StringPart> = Vec::new();
         let mut current_literal = String::new();
         let mut has_interpolation = false;
-        
+
         while let Some(c) = self.peek() {
             match c {
                 '"' => {
                     // End of string
                     self.advance(); // consume closing quote
-                    
+
                     // If we have a pending literal, add it
                     if !current_literal.is_empty() {
                         parts.push(StringPart::Literal(current_literal));
                     }
-                    
+
                     // Return appropriate token type
                     if has_interpolation {
                         return Ok(TokenKind::InterpolatedString(parts));
@@ -681,22 +693,22 @@ impl<'a> Lexer<'a> {
                         return Ok(TokenKind::StringLiteral(s));
                     }
                 }
-                
+
                 '\\' => {
                     self.advance(); // consume backslash
-                    
+
                     match self.peek() {
                         Some('(') => {
                             // String interpolation: \(expr)
                             self.advance(); // consume '('
                             has_interpolation = true;
-                            
+
                             // Save current literal if any
                             if !current_literal.is_empty() {
                                 parts.push(StringPart::Literal(current_literal.clone()));
                                 current_literal.clear();
                             }
-                            
+
                             // Scan until matching ')'
                             let expr = self.scan_interpolation_expr()?;
                             parts.push(StringPart::Interpolation(expr));
@@ -737,7 +749,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                 }
-                
+
                 '\n' => {
                     return Err(LexerError::new(
                         "Unterminated string (newline in string)",
@@ -745,29 +757,29 @@ impl<'a> Lexer<'a> {
                         start_column,
                     ));
                 }
-                
+
                 _ => {
                     current_literal.push(c);
                     self.advance();
                 }
             }
         }
-        
+
         Err(LexerError::new(
             "Unterminated string",
             start_line,
             start_column,
         ))
     }
-    
+
     /// Scan the expression inside \(...) interpolation
     fn scan_interpolation_expr(&mut self) -> Result<String, LexerError> {
         let start_line = self.line;
         let start_column = self.column;
-        
+
         let mut expr = String::new();
         let mut paren_depth = 1; // We've already consumed the opening '('
-        
+
         while let Some(c) = self.peek() {
             match c {
                 '(' => {
@@ -788,7 +800,7 @@ impl<'a> Lexer<'a> {
                     // Nested string in interpolation
                     self.advance();
                     expr.push('"');
-                    
+
                     // Scan until closing quote
                     while let Some(inner_c) = self.peek() {
                         if inner_c == '"' {
@@ -821,7 +833,7 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
-        
+
         Err(LexerError::new(
             "Unterminated interpolation (missing ')')",
             start_line,
@@ -889,7 +901,7 @@ mod tests {
         let source = "identity let var fn if else when every";
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
+
         assert!(matches!(tokens[0].kind, TokenKind::Identity));
         assert!(matches!(tokens[1].kind, TokenKind::Let));
         assert!(matches!(tokens[2].kind, TokenKind::Var));
@@ -905,7 +917,7 @@ mod tests {
         let source = "@alice @bob";
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
+
         assert!(matches!(&tokens[0].kind, TokenKind::Handle(h) if h == "alice"));
         assert!(matches!(&tokens[1].kind, TokenKind::Handle(h) if h == "bob"));
     }
@@ -915,10 +927,16 @@ mod tests {
         let source = "dix@alice home@bob/lights pay@merchant";
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
-        assert!(matches!(&tokens[0].kind, TokenKind::FacetAddress(p, h) if p == "dix" && h == "alice"));
-        assert!(matches!(&tokens[1].kind, TokenKind::FacetPath(p, h, path) if p == "home" && h == "bob" && path == "lights"));
-        assert!(matches!(&tokens[2].kind, TokenKind::FacetAddress(p, h) if p == "pay" && h == "merchant"));
+
+        assert!(
+            matches!(&tokens[0].kind, TokenKind::FacetAddress(p, h) if p == "dix" && h == "alice")
+        );
+        assert!(
+            matches!(&tokens[1].kind, TokenKind::FacetPath(p, h, path) if p == "home" && h == "bob" && path == "lights")
+        );
+        assert!(
+            matches!(&tokens[2].kind, TokenKind::FacetAddress(p, h) if p == "pay" && h == "merchant")
+        );
     }
 
     #[test]
@@ -926,7 +944,7 @@ mod tests {
         let source = "42 3.14 0xFF 0b1010";
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
+
         assert!(matches!(tokens[0].kind, TokenKind::IntLiteral(42)));
         assert!(matches!(tokens[1].kind, TokenKind::FloatLiteral(f) if (f - 3.14).abs() < 0.001));
         assert!(matches!(tokens[2].kind, TokenKind::IntLiteral(255)));
@@ -938,7 +956,7 @@ mod tests {
         let source = r#""Hello, world!" "With\nnewline""#;
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
+
         assert!(matches!(&tokens[0].kind, TokenKind::StringLiteral(s) if s == "Hello, world!"));
         assert!(matches!(&tokens[1].kind, TokenKind::StringLiteral(s) if s == "With\nnewline"));
     }
@@ -948,7 +966,7 @@ mod tests {
         let source = "+ - * / == != <= >= && || -> =>";
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
+
         assert!(matches!(tokens[0].kind, TokenKind::Plus));
         assert!(matches!(tokens[1].kind, TokenKind::Minus));
         assert!(matches!(tokens[2].kind, TokenKind::Star));
@@ -975,10 +993,10 @@ mod tests {
                 )
             }
         "#;
-        
+
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
+
         // Should tokenize without errors
         assert!(tokens.len() > 0);
         assert!(matches!(tokens[0].kind, TokenKind::Identity));
@@ -996,10 +1014,10 @@ mod tests {
                comment */
             let x = 42
         "#;
-        
+
         let lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
-        
+
         // Comments should be skipped
         assert!(matches!(tokens[0].kind, TokenKind::Identity));
         assert!(matches!(&tokens[1].kind, TokenKind::Identifier(s) if s == "me"));

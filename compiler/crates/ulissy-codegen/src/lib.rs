@@ -8,8 +8,8 @@ pub mod rust_emitter;
 pub use generator::*;
 pub use rust_emitter::*;
 
-use ulissy_types::TypedProgram;
 use std::fmt;
+use ulissy_types::TypedProgram;
 
 // ============================================================================
 // CODE GENERATION ERROR
@@ -22,7 +22,9 @@ pub struct CodeGenError {
 
 impl CodeGenError {
     pub fn new(message: &str) -> Self {
-        CodeGenError { message: message.to_string() }
+        CodeGenError {
+            message: message.to_string(),
+        }
     }
 }
 
@@ -71,19 +73,17 @@ pub fn generate(program: &TypedProgram, project_name: &str) -> Result<GeneratedC
 /// Compile ULissy source code directly to Rust
 pub fn compile(source: &str, project_name: &str) -> Result<GeneratedCode, String> {
     // Parse
-    let ast = ulissy_parser::parse(source)
-        .map_err(|e| format!("Parse error: {}", e))?;
-    
+    let ast = ulissy_parser::parse(source).map_err(|e| format!("Parse error: {}", e))?;
+
     // Type check
-    let typed = ulissy_types::check(&ast)
-        .map_err(|errors| {
-            errors.iter()
-                .map(|e| e.to_string())
-                .collect::<Vec<_>>()
-                .join("\n")
-        })?;
-    
+    let typed = ulissy_types::check(&ast).map_err(|errors| {
+        errors
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    })?;
+
     // Generate
-    generate(&typed, project_name)
-        .map_err(|e| e.to_string())
+    generate(&typed, project_name).map_err(|e| e.to_string())
 }

@@ -17,45 +17,48 @@ pub enum Type {
     Bool,
     String,
     Nil,
-    
+
     // === IDENTITY TYPES (GNS-specific) ===
     Identity,
     PublicKey,
     PrivateKey,
     Signature,
     Handle,
-    
+
     // === SPATIAL TYPES (GNS-specific) ===
     H3Cell,
     Resolution,
     Distance,
     Coordinates,
-    
+
     // === TEMPORAL TYPES ===
     Moment,
     Duration,
-    
+
     // === CRYPTO TYPES ===
     Hash,
     SharedSecret,
     Ciphertext,
-    
+
     // === ENERGY TYPES ===
     BatteryLevel,
     PowerMode,
-    
+
     // === COMPOUND TYPES ===
     Array(Box<Type>),
     Optional(Box<Type>),
-    Function { params: Vec<Type>, ret: Box<Type> },
+    Function {
+        params: Vec<Type>,
+        ret: Box<Type>,
+    },
     Tuple(Vec<Type>),
-    
+
     // === GNS PROTOCOL TYPES ===
     Breadcrumb,
     Trajectory,
     Envelope(Box<Type>),
     GnsRecord,
-    
+
     // === SEARCH TYPES ===
     TrustScore,
     SearchResult,
@@ -64,25 +67,25 @@ pub enum Type {
     SearchQuery,
     SpatialFilter,
     IdentityFilter,
-    
+
     // === FACET TYPES ===
     FacetAddress,
-    
+
     // === SPECIAL ===
-    Unit,           // void/nothing
-    Any,            // for flexibility during development
-    Unknown,        // not yet inferred
-    Error,          // type error placeholder
-    
+    Unit,    // void/nothing
+    Any,     // for flexibility during development
+    Unknown, // not yet inferred
+    Error,   // type error placeholder
+
     // === USER-DEFINED ===
     Named(String),
-    
+
     /// An enum type with its variants
     Enum {
         name: String,
         variants: Vec<EnumVariantType>,
     },
-    
+
     /// Anonymous object/record type: { x: Int, y: Int }
     Object {
         fields: Vec<(String, Type)>,
@@ -94,7 +97,7 @@ pub enum Type {
 pub struct EnumVariantType {
     /// Variant name (e.g., "gps", "ok")
     pub name: String,
-    
+
     /// Associated types, if any
     /// None for simple variants
     /// Some([Type::Int]) for single-value variants
@@ -106,22 +109,29 @@ impl Type {
     pub fn is_numeric(&self) -> bool {
         matches!(self, Type::Int | Type::Float | Type::BatteryLevel)
     }
-    
+
     /// Check if this type is a GNS identity type
     pub fn is_identity(&self) -> bool {
-        matches!(self, Type::Identity | Type::PublicKey | Type::PrivateKey | Type::Handle)
+        matches!(
+            self,
+            Type::Identity | Type::PublicKey | Type::PrivateKey | Type::Handle
+        )
     }
-    
+
     /// Check if this type is spatial
     pub fn is_spatial(&self) -> bool {
         matches!(self, Type::H3Cell | Type::Coordinates | Type::Distance)
     }
-    
+
     /// Check if types are compatible for assignment
     pub fn is_assignable_from(&self, other: &Type) -> bool {
-        if self == other { return true; }
-        if *self == Type::Any || *other == Type::Any { return true; }
-        
+        if self == other {
+            return true;
+        }
+        if *self == Type::Any || *other == Type::Any {
+            return true;
+        }
+
         match (self, other) {
             // Int can be promoted to Float
             (Type::Float, Type::Int) => true,
@@ -133,11 +143,11 @@ impl Type {
             _ => false,
         }
     }
-    
+
     /// Get the result type of a binary operation
     pub fn binary_result(&self, op: &ast::BinaryOp, other: &Type) -> Option<Type> {
         use ast::BinaryOp::*;
-        
+
         // For comparisons and logical ops, result is always Bool, even with Any
         match op {
             Eq | NotEq | Lt | Gt | LtEq | GtEq | And | Or | Within | Near => {
@@ -155,7 +165,7 @@ impl Type {
                 }
             }
         }
-        
+
         match op {
             // Arithmetic: requires numeric, returns numeric
             Add | Sub | Mul | Div | Mod => {
@@ -175,27 +185,27 @@ impl Type {
                     None
                 }
             }
-            
+
             // Comparison: requires compatible types, returns Bool
             Eq | NotEq => Some(Type::Bool),
             Lt | Gt | LtEq | GtEq => {
-                let is_compat = (self.is_numeric() && other.is_numeric()) ||
-                                (*self == Type::Moment && *other == Type::Moment) ||
-                                (*self == Type::Duration && *other == Type::Duration) ||
-                                (*self == Type::Moment && *other == Type::Moment) ||
-                                (*self == Type::Duration && *other == Type::Duration) ||
-                                (*self == Type::Distance && *other == Type::Distance) ||
-                                (*self == Type::TrustScore && *other == Type::Float) ||
-                                (*self == Type::Float && *other == Type::TrustScore) ||
-                                (*self == Type::TrustScore && *other == Type::TrustScore);
-                
+                let is_compat = (self.is_numeric() && other.is_numeric())
+                    || (*self == Type::Moment && *other == Type::Moment)
+                    || (*self == Type::Duration && *other == Type::Duration)
+                    || (*self == Type::Moment && *other == Type::Moment)
+                    || (*self == Type::Duration && *other == Type::Duration)
+                    || (*self == Type::Distance && *other == Type::Distance)
+                    || (*self == Type::TrustScore && *other == Type::Float)
+                    || (*self == Type::Float && *other == Type::TrustScore)
+                    || (*self == Type::TrustScore && *other == Type::TrustScore);
+
                 if is_compat {
                     Some(Type::Bool)
                 } else {
                     None
                 }
             }
-            
+
             // Logical: requires Bool, returns Bool
             And | Or => {
                 if *self == Type::Bool && *other == Type::Bool {
@@ -204,10 +214,10 @@ impl Type {
                     None
                 }
             }
-            
+
             // Range
             Range | RangeExclusive => Some(Type::Array(Box::new(self.clone()))),
-            
+
             // Spatial
             Within | Near => {
                 if self.is_spatial() {
@@ -273,7 +283,9 @@ impl fmt::Display for Type {
             Type::Object { fields } => {
                 write!(f, "{{ ")?;
                 for (i, (name, ty)) in fields.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}: {}", name, ty)?;
                 }
                 write!(f, " }}")
@@ -332,37 +344,37 @@ pub enum TypedStatementKind {
         fields: Vec<(String, TypedExpr)>,
     },
     ExpressionStatement(TypedExpr),
-    
+
     EnumDecl {
         name: String,
         type_params: Vec<String>,
         variants: Vec<TypedEnumVariant>,
     },
-    
+
     TypeDecl {
         name: String,
         fields: Vec<(String, Type)>,
     },
-    
+
     ConfigBlock {
         fields: Vec<TypedConfigField>,
     },
-    
+
     ComputedPropertyDecl {
         name: String,
         inferred_type: Type,
         body: TypedComputedBody,
     },
-    
+
     FnDecl {
         name: String,
         params: Vec<TypedParam>,
         return_type: Type,
         body: Vec<TypedStatement>,
     },
-    
+
     ReturnStatement(Option<TypedExpr>),
-    
+
     IfStatement {
         condition: TypedExpr,
         then_block: Vec<TypedStatement>,
@@ -376,18 +388,18 @@ pub enum TypedStatementKind {
         then_block: Vec<TypedStatement>,
         else_block: Option<Vec<TypedStatement>>,
     },
-    
+
     ForStatement {
         item_name: String,
         collection: TypedExpr,
         body: Vec<TypedStatement>,
     },
-    
+
     MatchStatement {
         expr: TypedExpr,
         cases: Vec<TypedMatchCase>,
     },
-    
+
     AfterBlock {
         delay: TypedExpr,
         body: Vec<TypedStatement>,
@@ -443,7 +455,10 @@ pub enum TypedExprKind {
     Literal(ast::Literal),
     Identifier(String),
     Handle(String),
-    FacetAddress { prefix: String, handle: String },
+    FacetAddress {
+        prefix: String,
+        handle: String,
+    },
     Binary {
         left: Box<TypedExpr>,
         op: ast::BinaryOp,
@@ -471,37 +486,37 @@ pub enum TypedExprKind {
         unit: String,
     },
     Array(Vec<TypedExpr>),
-    
+
     /// Optional member access: obj?.member
     OptionalMember {
         object: Box<TypedExpr>,
         member: String,
     },
-    
+
     /// Optional method call: obj?.method(args)
     OptionalMethodCall {
         object: Box<TypedExpr>,
         method: String,
         args: Vec<TypedExpr>,
     },
-    
+
     /// Nil coalescing: expr ?? default
     NilCoalescing {
         primary: Box<TypedExpr>,
         fallback: Box<TypedExpr>,
     },
-    
+
     /// Object literal: { x: 10, y: 20 }
     ObjectLiteral {
         fields: Vec<TypedObjectField>,
         type_hint: Option<String>,
     },
-    
+
     /// Interpolated string: "Hello, \(name)!"
     InterpolatedString {
         parts: Vec<TypedInterpolatedPart>,
     },
-    
+
     /// Search: search nearby ...
     Search {
         target: TypedSearchTarget,
@@ -515,10 +530,10 @@ pub enum TypedExprKind {
 pub struct TypedObjectField {
     /// Field name
     pub name: String,
-    
+
     /// Typed field value
     pub value: TypedExpr,
-    
+
     /// Inferred type of the field
     pub field_type: Type,
 }
@@ -528,7 +543,7 @@ pub struct TypedObjectField {
 pub enum TypedInterpolatedPart {
     /// Literal text
     Literal(String),
-    
+
     /// Typed expression to interpolate
     Expression(TypedExpr),
 }
@@ -562,19 +577,41 @@ impl Symbol {
 
 #[derive(Debug, Clone)]
 pub enum TypedSearchTarget {
-    Nearby { radius: Option<Box<TypedExpr>> },
-    Within { center: Box<TypedExpr>, radius: Box<TypedExpr> },
-    Identity { handle: Box<TypedExpr> },
-    Text { query: Box<TypedExpr> },
+    Nearby {
+        radius: Option<Box<TypedExpr>>,
+    },
+    Within {
+        center: Box<TypedExpr>,
+        radius: Box<TypedExpr>,
+    },
+    Identity {
+        handle: Box<TypedExpr>,
+    },
+    Text {
+        query: Box<TypedExpr>,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum TypedSearchFilter {
-    TrustThreshold { op: ast::ComparisonOp, value: Box<TypedExpr> },
-    FacetMatch { facet_name: Box<TypedExpr> },
-    ActiveWithin { duration: Box<TypedExpr> },
-    OrgMatch { org_name: Box<TypedExpr> },
-    FieldCompare { field: String, op: ast::ComparisonOp, value: Box<TypedExpr> },
+    TrustThreshold {
+        op: ast::ComparisonOp,
+        value: Box<TypedExpr>,
+    },
+    FacetMatch {
+        facet_name: Box<TypedExpr>,
+    },
+    ActiveWithin {
+        duration: Box<TypedExpr>,
+    },
+    OrgMatch {
+        org_name: Box<TypedExpr>,
+    },
+    FieldCompare {
+        field: String,
+        op: ast::ComparisonOp,
+        value: Box<TypedExpr>,
+    },
 }
 
 #[derive(Debug, Clone)]

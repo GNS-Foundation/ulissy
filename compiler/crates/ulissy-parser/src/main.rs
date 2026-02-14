@@ -16,7 +16,7 @@ fn main() {
     }
 
     let filename = &args[1];
-    
+
     match fs::read_to_string(filename) {
         Ok(source) => {
             println!("╔════════════════════════════════════════════════════════════╗");
@@ -25,7 +25,7 @@ fn main() {
             println!();
             println!("Source file: {}", filename);
             println!("{}", "─".repeat(60));
-            
+
             match parse(&source) {
                 Ok(program) => {
                     println!("✓ Parsing successful!");
@@ -53,7 +53,7 @@ fn run_demo() {
     println!("║              ULissy Parser v0.1.0 - DEMO                   ║");
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
-    
+
     let demo_source = r#"// ULissy Demo Program
 identity me = Keychain.primary
 
@@ -84,13 +84,13 @@ dix@me.post("Hello GNS!", visibility: .public)
     }
     println!("{}", "─".repeat(60));
     println!();
-    
+
     match parse(demo_source) {
         Ok(program) => {
             println!("✓ Parsing successful!");
             println!("  Total statements: {}", program.statements.len());
             println!();
-            
+
             // Summary of statement types
             let mut identity_count = 0;
             let mut let_count = 0;
@@ -98,7 +98,7 @@ dix@me.post("Hello GNS!", visibility: .public)
             let mut when_count = 0;
             let mut send_count = 0;
             let mut expr_count = 0;
-            
+
             for stmt in &program.statements {
                 match stmt {
                     ulissy_parser::ast::Statement::IdentityDecl(_) => identity_count += 1,
@@ -110,7 +110,7 @@ dix@me.post("Hello GNS!", visibility: .public)
                     _ => {}
                 }
             }
-            
+
             println!("Statement Summary:");
             println!("{}", "─".repeat(40));
             println!("  Identity declarations: {:4}", identity_count);
@@ -121,16 +121,16 @@ dix@me.post("Hello GNS!", visibility: .public)
             println!("  Expression statements: {:4}", expr_count);
             println!("{}", "─".repeat(40));
             println!();
-            
+
             println!("Abstract Syntax Tree:");
             println!("{}", "─".repeat(60));
             println!("{}", program.pretty_print());
-            
+
             // Show detailed view of first few statements
             println!();
             println!("Detailed Statement Analysis:");
             println!("{}", "─".repeat(60));
-            
+
             for (i, stmt) in program.statements.iter().take(5).enumerate() {
                 println!();
                 println!("Statement {}:", i + 1);
@@ -171,7 +171,7 @@ dix@me.post("Hello GNS!", visibility: .public)
             process::exit(1);
         }
     }
-    
+
     println!();
     println!("{}", "─".repeat(60));
     println!("Usage: ulissy-parse <filename.ul>");

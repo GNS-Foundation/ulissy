@@ -16,7 +16,7 @@ fn main() {
     }
 
     let filename = &args[1];
-    
+
     match fs::read_to_string(filename) {
         Ok(source) => {
             println!("╔════════════════════════════════════════════════════════════╗");
@@ -25,7 +25,7 @@ fn main() {
             println!();
             println!("Source file: {}", filename);
             println!("{}", "─".repeat(60));
-            
+
             match check_source(&source) {
                 Ok(program) => {
                     println!("✓ Type checking successful!");
@@ -51,7 +51,7 @@ fn run_demo() {
     println!("║            ULissy Type Checker v0.1.0 - DEMO               ║");
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
-    
+
     // Demo 1: Valid program
     let valid_source = r#"// Valid ULissy Program
 identity me = Keychain.primary
@@ -81,7 +81,7 @@ send to @alice {
     }
     println!("{}", "─".repeat(60));
     println!();
-    
+
     match check_source(valid_source) {
         Ok(program) => {
             println!("✓ Type checking successful!");
@@ -93,10 +93,10 @@ send to @alice {
             println!("✗ Type errors:\n{}", e);
         }
     }
-    
+
     println!();
     println!();
-    
+
     // Demo 2: Program with type errors
     let invalid_source = r#"// Invalid ULissy Program - Type Errors
 identity me = "not an identity"
@@ -117,7 +117,7 @@ when 42 {
     }
     println!("{}", "─".repeat(60));
     println!();
-    
+
     match check_source(invalid_source) {
         Ok(_) => {
             println!("✓ (unexpectedly passed)");
@@ -129,7 +129,7 @@ when 42 {
             }
         }
     }
-    
+
     println!();
     println!("{}", "─".repeat(60));
     println!("Usage: ulissy-check <filename.ul>");
@@ -142,7 +142,7 @@ when 42 {
 fn print_typed_program(program: &ulissy_types::TypedProgram) {
     println!("Typed AST:");
     println!("{}", "─".repeat(60));
-    
+
     for (i, stmt) in program.statements.iter().enumerate() {
         println!();
         println!("Statement {}: {:?}", i + 1, stmt.kind);

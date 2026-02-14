@@ -16,10 +16,8 @@ fn main() {
     }
 
     let filename = &args[1];
-    let project_name = args.get(2)
-        .map(|s| s.as_str())
-        .unwrap_or("ulissy_app");
-    
+    let project_name = args.get(2).map(|s| s.as_str()).unwrap_or("ulissy_app");
+
     match fs::read_to_string(filename) {
         Ok(source) => {
             println!("╔════════════════════════════════════════════════════════════╗");
@@ -29,7 +27,7 @@ fn main() {
             println!("Source file: {}", filename);
             println!("Project name: {}", project_name);
             println!("{}", "─".repeat(60));
-            
+
             match compile(&source, project_name) {
                 Ok(generated) => {
                     println!("✓ Code generation successful!");
@@ -62,7 +60,7 @@ fn run_demo() {
     println!("║          ULissy Code Generator v0.1.0 - DEMO               ║");
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
-    
+
     let demo_source = r#"// ULissy Demo Program
 identity me = Keychain.primary
 
@@ -91,25 +89,25 @@ send to @alice {
     }
     println!("{}", "─".repeat(60));
     println!();
-    
+
     match compile(demo_source, "gns_breadcrumb_app") {
         Ok(generated) => {
             println!("✓ Compilation successful!");
             println!();
-            println!("{}",  "═".repeat(60));
+            println!("{}", "═".repeat(60));
             println!("                    GENERATED RUST CODE");
             println!("{}", "═".repeat(60));
             println!();
             println!("{}", generated.main_rs);
             println!("{}", "═".repeat(60));
             println!();
-            println!("{}",  "═".repeat(60));
+            println!("{}", "═".repeat(60));
             println!("                   GENERATED Cargo.toml");
             println!("{}", "═".repeat(60));
             println!();
             println!("{}", generated.cargo_toml);
             println!("{}", "═".repeat(60));
-            
+
             println!();
             println!("The ULissy compiler transforms high-level GNS protocol code");
             println!("into production-ready Rust that calls gns-crypto-core.");
@@ -121,7 +119,7 @@ send to @alice {
             process::exit(1);
         }
     }
-    
+
     println!();
     println!("{}", "─".repeat(60));
     println!("Usage: ulissy-gen <filename.ul> [project_name]");

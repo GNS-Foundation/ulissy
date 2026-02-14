@@ -5,8 +5,8 @@
 pub mod ast;
 
 use ast::*;
-use ulissy_lexer::{Token, TokenKind, StringPart};
 use std::fmt;
+use ulissy_lexer::{StringPart, Token, TokenKind};
 
 // ============================================================================
 // PARSER ERROR
@@ -21,13 +21,21 @@ pub struct ParseError {
 
 impl ParseError {
     pub fn new(message: &str, line: usize, column: usize) -> Self {
-        ParseError { message: message.to_string(), line, column }
+        ParseError {
+            message: message.to_string(),
+            line,
+            column,
+        }
     }
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Parse error at line {}, column {}: {}", self.line, self.column, self.message)
+        write!(
+            f,
+            "Parse error at line {}, column {}: {}",
+            self.line, self.column, self.message
+        )
     }
 }
 
@@ -50,11 +58,11 @@ impl Parser {
     /// Parse the entire program
     pub fn parse(mut self) -> Result<Program, ParseError> {
         let mut statements = Vec::new();
-        
+
         while !self.is_at_end() {
             statements.push(self.parse_statement()?);
         }
-        
+
         Ok(Program { statements })
     }
 
@@ -90,11 +98,11 @@ impl Parser {
     fn parse_identity_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Identity)?;
-        
+
         let name = self.expect_identifier()?;
         self.expect(TokenKind::Equal)?;
         let initializer = self.parse_expression()?;
-        
+
         Ok(Statement::IdentityDecl(IdentityDecl {
             name,
             initializer,
@@ -106,19 +114,19 @@ impl Parser {
     fn parse_let_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Let)?;
-        
+
         let name = self.expect_identifier()?;
-        
+
         let type_annotation = if self.check(TokenKind::Colon) {
             self.advance();
             Some(self.parse_type_expr()?)
         } else {
             None
         };
-        
+
         self.expect(TokenKind::Equal)?;
         let initializer = self.parse_expression()?;
-        
+
         Ok(Statement::LetDecl(LetDecl {
             name,
             type_annotation,
@@ -131,23 +139,23 @@ impl Parser {
     fn parse_var_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Var)?;
-        
+
         let name = self.expect_identifier()?;
-        
+
         let type_annotation = if self.check(TokenKind::Colon) {
             self.advance();
             Some(self.parse_type_expr()?)
         } else {
             None
         };
-        
+
         let initializer = if self.check(TokenKind::Equal) {
             self.advance();
             Some(self.parse_expression()?)
         } else {
             None
         };
-        
+
         Ok(Statement::VarDecl(VarDecl {
             name,
             type_annotation,
@@ -160,19 +168,19 @@ impl Parser {
     fn parse_const_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Const)?;
-        
+
         let name = self.expect_identifier()?;
-        
+
         let type_annotation = if self.check(TokenKind::Colon) {
             self.advance();
             Some(self.parse_type_expr()?)
         } else {
             None
         };
-        
+
         self.expect(TokenKind::Equal)?;
         let initializer = self.parse_expression()?;
-        
+
         Ok(Statement::ConstDecl(ConstDecl {
             name,
             type_annotation,
@@ -184,36 +192,36 @@ impl Parser {
     /// fn name(params) -> ReturnType { body }
     fn parse_fn_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
-        
+
         let is_async = if self.check(TokenKind::Async) {
             self.advance();
             true
         } else {
             false
         };
-        
+
         self.expect(TokenKind::Fn)?;
         let name = self.expect_identifier()?;
-        
+
         self.expect(TokenKind::LeftParen)?;
         let params = self.parse_parameters()?;
         self.expect(TokenKind::RightParen)?;
-        
+
         let return_type = if self.check(TokenKind::Arrow) {
             self.advance();
             Some(self.parse_type_expr()?)
         } else {
             None
         };
-        
+
         let constraints = if self.check(TokenKind::Where) {
             self.parse_where_clauses()?
         } else {
             Vec::new()
         };
-        
+
         let body = self.parse_block()?;
-        
+
         Ok(Statement::FnDecl(FnDecl {
             name,
             params,
@@ -227,46 +235,50 @@ impl Parser {
 
     fn parse_parameters(&mut self) -> Result<Vec<Parameter>, ParseError> {
         let mut params = Vec::new();
-        
+
         if !self.check(TokenKind::RightParen) {
             loop {
                 let name = self.expect_identifier()?;
                 self.expect(TokenKind::Colon)?;
                 let type_expr = self.parse_type_expr()?;
-                
+
                 let default_value = if self.check(TokenKind::Equal) {
                     self.advance();
                     Some(self.parse_expression()?)
                 } else {
                     None
                 };
-                
-                params.push(Parameter { name, type_expr, default_value });
-                
+
+                params.push(Parameter {
+                    name,
+                    type_expr,
+                    default_value,
+                });
+
                 if !self.check(TokenKind::Comma) {
                     break;
                 }
                 self.advance();
             }
         }
-        
+
         Ok(params)
     }
 
     fn parse_where_clauses(&mut self) -> Result<Vec<WhereClause>, ParseError> {
         let mut clauses = Vec::new();
         self.expect(TokenKind::Where)?;
-        
+
         loop {
             let expression = self.parse_expression()?;
             clauses.push(WhereClause { expression });
-            
+
             if !self.check(TokenKind::Comma) {
                 break;
             }
             self.advance();
         }
-        
+
         Ok(clauses)
     }
 
@@ -274,13 +286,13 @@ impl Parser {
     fn parse_type_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Type)?;
-        
+
         let name = self.expect_identifier()?;
         self.expect(TokenKind::LeftBrace)?;
-        
+
         let mut fields = Vec::new();
         let mut invariants = Vec::new();
-        
+
         while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
             if self.check(TokenKind::Invariant) {
                 self.advance();
@@ -292,18 +304,18 @@ impl Parser {
                 } else {
                     false
                 };
-                
+
                 let field_name = self.expect_identifier()?;
                 self.expect(TokenKind::Colon)?;
                 let type_expr = self.parse_type_expr()?;
-                
+
                 let default_value = if self.check(TokenKind::Equal) {
                     self.advance();
                     Some(self.parse_expression()?)
                 } else {
                     None
                 };
-                
+
                 fields.push(FieldDecl {
                     name: field_name,
                     type_expr,
@@ -311,13 +323,13 @@ impl Parser {
                     default_value,
                 });
             }
-            
+
             // Optional comma/newline between fields
             self.check(TokenKind::Comma).then(|| self.advance());
         }
-        
+
         self.expect(TokenKind::RightBrace)?;
-        
+
         Ok(Statement::TypeDecl(TypeDecl {
             name,
             fields,
@@ -337,41 +349,41 @@ impl Parser {
     fn parse_enum_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Enum)?;
-        
+
         // Parse enum name
         let name = self.expect_identifier()?;
-        
+
         // Parse optional type parameters: <T, E>
         let type_params = if self.check(TokenKind::Less) {
             self.parse_type_params()?
         } else {
             Vec::new()
         };
-        
+
         // Expect opening brace
         self.expect(TokenKind::LeftBrace)?;
-        
+
         // Parse variants
         let mut variants = Vec::new();
-        
+
         while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
             let variant = self.parse_enum_variant()?;
             variants.push(variant);
-            
+
             // Comma is optional between variants (allows trailing comma)
             if self.check(TokenKind::Comma) {
                 self.advance();
             }
         }
-        
+
         // Expect closing brace
         self.expect(TokenKind::RightBrace)?;
-        
+
         // Validate: enum must have at least one variant
         if variants.is_empty() {
             return Err(self.error("Enum must have at least one variant"));
         }
-        
+
         Ok(Statement::EnumDecl(EnumDecl {
             name,
             type_params,
@@ -383,11 +395,11 @@ impl Parser {
     /// Parse a single enum variant: name or name(Type, Type)
     fn parse_enum_variant(&mut self) -> Result<EnumVariant, ParseError> {
         let name = self.expect_identifier()?;
-        
+
         // Check for associated types: variant(Type, Type)
         let associated_types = if self.check(TokenKind::LeftParen) {
             self.advance();
-            
+
             // Empty parens: none()
             if self.check(TokenKind::RightParen) {
                 self.advance();
@@ -397,20 +409,20 @@ impl Parser {
                 let mut types = Vec::new();
                 loop {
                     types.push(self.parse_type_expr()?);
-                    
+
                     if !self.check(TokenKind::Comma) {
                         break;
                     }
                     self.advance();
                 }
-                
+
                 self.expect(TokenKind::RightParen)?;
                 Some(types)
             }
         } else {
             None
         };
-        
+
         Ok(EnumVariant {
             name,
             associated_types,
@@ -421,19 +433,19 @@ impl Parser {
     /// Parse type parameters: <T, E, ...>
     fn parse_type_params(&mut self) -> Result<Vec<String>, ParseError> {
         self.expect(TokenKind::Less)?;
-        
+
         let mut params = Vec::new();
         loop {
             params.push(self.expect_identifier()?);
-            
+
             if !self.check(TokenKind::Comma) {
                 break;
             }
             self.advance();
         }
-        
+
         self.expect(TokenKind::Greater)?;
-        
+
         Ok(params)
     }
 
@@ -441,18 +453,18 @@ impl Parser {
     fn parse_every_block(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Every)?;
-        
+
         let interval = self.parse_expression()?;
-        
+
         let condition = if self.check(TokenKind::When) {
             self.advance();
             Some(self.parse_expression()?)
         } else {
             None
         };
-        
+
         let body = self.parse_block()?;
-        
+
         Ok(Statement::EveryBlock(EveryBlock {
             interval,
             condition,
@@ -465,10 +477,10 @@ impl Parser {
     fn parse_when_block(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::When)?;
-        
+
         let condition = self.parse_expression()?;
         let body = self.parse_block()?;
-        
+
         Ok(Statement::WhenBlock(WhenBlock {
             condition,
             body,
@@ -480,10 +492,10 @@ impl Parser {
     fn parse_after_block(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::After)?;
-        
+
         let delay = self.parse_expression()?;
         let body = self.parse_block()?;
-        
+
         Ok(Statement::AfterBlock(AfterBlock {
             delay,
             body,
@@ -496,24 +508,24 @@ impl Parser {
         let start = self.current_span();
         self.expect(TokenKind::Send)?;
         self.expect(TokenKind::To)?;
-        
+
         let recipient = self.parse_expression()?;
-        
+
         self.expect(TokenKind::LeftBrace)?;
         let mut fields = Vec::new();
-        
+
         while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
             let field_name = self.expect_identifier()?;
             self.expect(TokenKind::Colon)?;
             let value = self.parse_expression()?;
             fields.push((field_name, value));
-            
+
             // Optional comma
             self.check(TokenKind::Comma).then(|| self.advance());
         }
-        
+
         self.expect(TokenKind::RightBrace)?;
-        
+
         Ok(Statement::SendStatement(SendStatement {
             recipient,
             fields,
@@ -525,15 +537,15 @@ impl Parser {
     fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::If)?;
-        
+
         // Check for "if let" — optional binding
         if self.check(TokenKind::Let) {
             return self.parse_if_let_statement(start);
         }
-        
+
         let condition = self.parse_expression()?;
         let then_branch = self.parse_block()?;
-        
+
         let else_branch = if self.check(TokenKind::Else) {
             self.advance();
             if self.check(TokenKind::If) {
@@ -549,7 +561,7 @@ impl Parser {
         } else {
             None
         };
-        
+
         Ok(Statement::IfStatement(IfStatement {
             condition,
             then_branch,
@@ -557,16 +569,16 @@ impl Parser {
             span: start,
         }))
     }
-    
+
     /// Parse: if let <binding> = <expr> { ... } else { ... }
     fn parse_if_let_statement(&mut self, start: Span) -> Result<Statement, ParseError> {
         self.expect(TokenKind::Let)?;
-        
+
         let binding = self.expect_identifier()?;
         self.expect(TokenKind::Equal)?;
         let value = self.parse_expression()?;
         let then_branch = self.parse_block()?;
-        
+
         let else_branch = if self.check(TokenKind::Else) {
             self.advance();
             if self.check(TokenKind::If) {
@@ -581,7 +593,7 @@ impl Parser {
         } else {
             None
         };
-        
+
         Ok(Statement::IfLetStatement(IfLetStatement {
             binding,
             value,
@@ -595,10 +607,10 @@ impl Parser {
     fn parse_match_statement(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Match)?;
-        
+
         let subject = self.parse_expression()?;
         self.expect(TokenKind::LeftBrace)?;
-        
+
         let mut cases = Vec::new();
         while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
             // Handle both 'case pattern:' and 'default:'
@@ -609,22 +621,26 @@ impl Parser {
                 self.expect(TokenKind::Case)?;
                 self.parse_pattern()?
             };
-            
+
             let guard = if self.check(TokenKind::Where) {
                 self.advance();
                 Some(self.parse_expression()?)
             } else {
                 None
             };
-            
+
             self.expect(TokenKind::Colon)?;
             let body = self.parse_block()?;
-            
-            cases.push(MatchCase { pattern, guard, body });
+
+            cases.push(MatchCase {
+                pattern,
+                guard,
+                body,
+            });
         }
-        
+
         self.expect(TokenKind::RightBrace)?;
-        
+
         Ok(Statement::MatchStatement(MatchStatement {
             subject,
             cases,
@@ -637,13 +653,15 @@ impl Parser {
             Some(TokenKind::Identifier(name)) => {
                 let name = name.clone();
                 self.advance();
-                
+
                 if self.check(TokenKind::LeftParen) {
                     self.advance();
                     let mut bindings = Vec::new();
                     while !self.check(TokenKind::RightParen) {
                         bindings.push(self.expect_identifier()?);
-                        if !self.check(TokenKind::Comma) { break; }
+                        if !self.check(TokenKind::Comma) {
+                            break;
+                        }
                         self.advance();
                     }
                     self.expect(TokenKind::RightParen)?;
@@ -670,26 +688,29 @@ impl Parser {
     fn parse_return_statement(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Return)?;
-        
+
         let value = if !self.check(TokenKind::RightBrace) && !self.is_at_end() {
             Some(self.parse_expression()?)
         } else {
             None
         };
-        
-        Ok(Statement::ReturnStatement(ReturnStatement { value, span: start }))
+
+        Ok(Statement::ReturnStatement(ReturnStatement {
+            value,
+            span: start,
+        }))
     }
 
     /// for item in collection { body }
     fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::For)?;
-        
+
         let variable = self.expect_identifier()?;
         self.expect(TokenKind::In)?;
         let iterable = self.parse_expression()?;
         let body = self.parse_block()?;
-        
+
         Ok(Statement::ForStatement(ForStatement {
             variable,
             iterable,
@@ -702,25 +723,29 @@ impl Parser {
     fn parse_import_statement(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Import)?;
-        
+
         let mut path = vec![self.expect_identifier()?];
         while self.check(TokenKind::Dot) {
             self.advance();
             path.push(self.expect_identifier()?);
         }
-        
+
         let alias = if self.check(TokenKind::As) {
             self.advance();
             Some(self.expect_identifier()?)
         } else {
             None
         };
-        
-        Ok(Statement::ImportStatement(ImportStatement { path, alias, span: start }))
+
+        Ok(Statement::ImportStatement(ImportStatement {
+            path,
+            alias,
+            span: start,
+        }))
     }
 
     /// config { resolution: 7, interval: 10.minutes }
-    /// 
+    ///
     /// Config blocks define module-level constants that are:
     /// - Evaluated at compile time when possible
     /// - Accessible throughout the module as `config.fieldName`
@@ -728,29 +753,29 @@ impl Parser {
         let start = self.current_span();
         self.expect(TokenKind::Config)?;
         self.expect(TokenKind::LeftBrace)?;
-        
+
         let mut fields = Vec::new();
-        
+
         while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
             let field_span = self.current_span();
             let name = self.expect_identifier()?;
             self.expect(TokenKind::Colon)?;
             let value = self.parse_expression()?;
-            
+
             fields.push(ConfigField {
                 name,
                 value,
                 span: field_span,
             });
-            
+
             // Optional comma between fields
             if self.check(TokenKind::Comma) {
                 self.advance();
             }
         }
-        
+
         self.expect(TokenKind::RightBrace)?;
-        
+
         Ok(Statement::ConfigBlock(ConfigBlock {
             fields,
             span: start,
@@ -760,22 +785,22 @@ impl Parser {
     /// computed status: CollectionStatus { isActive: running, count: total }
     /// OR
     /// computed total: Int = items.count
-    /// 
+    ///
     /// Standalone computed properties are reactive values that:
     /// - Automatically update when dependencies change
     /// - Can be accessed like regular properties
     fn parse_computed_property_decl(&mut self) -> Result<Statement, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::Computed)?;
-        
+
         let name = self.expect_identifier()?;
         self.expect(TokenKind::Colon)?;
         let type_annotation = self.parse_type_expr()?;
-        
+
         // Two forms:
         // 1. computed x: Int = expr
         // 2. computed x: Type { field: expr, ... }
-        
+
         let body = if self.check(TokenKind::Equal) {
             // Form 1: Single expression
             self.advance();
@@ -784,24 +809,24 @@ impl Parser {
         } else if self.check(TokenKind::LeftBrace) {
             // Form 2: Object literal body
             self.advance();
-            
+
             let mut fields = Vec::new();
-            
+
             while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
                 let field = self.parse_object_field()?;
                 fields.push(field);
-                
+
                 if self.check(TokenKind::Comma) {
                     self.advance();
                 }
             }
-            
+
             self.expect(TokenKind::RightBrace)?;
             ComputedBody::ObjectFields(fields)
         } else {
             return Err(self.error("Expected '=' or '{' after computed property type"));
         };
-        
+
         Ok(Statement::ComputedPropertyDecl(ComputedPropertyDecl {
             name,
             type_annotation,
@@ -823,13 +848,13 @@ impl Parser {
         // Assignment has lowest precedence
         self.parse_assignment_expr()
     }
-    
+
     /// Parse assignment expression: target = value
     /// Assignment is right-associative: a = b = c becomes a = (b = c)
     fn parse_assignment_expr(&mut self) -> Result<Expression, ParseError> {
         let span = self.current_span();
         let left = self.parse_nil_coalescing_expr()?;
-        
+
         if self.check(TokenKind::Equal) {
             self.advance(); // consume =
             let value = self.parse_assignment_expr()?; // right-associative
@@ -839,39 +864,39 @@ impl Parser {
                 span,
             })));
         }
-        
+
         Ok(left)
     }
 
     /// Parse nil coalescing expression: expr ?? default
-    /// 
+    ///
     /// Precedence: Lower than || (or), so `a || b ?? c` means `(a || b) ?? c`
-    /// 
+    ///
     /// Example: `me.trajectory.last?.hash ?? "genesis"`
     fn parse_nil_coalescing_expr(&mut self) -> Result<Expression, ParseError> {
         let mut left = self.parse_or_expr()?;
-        
+
         while self.check(TokenKind::DoubleQuestion) {
             let span = self.current_span();
             self.advance(); // consume ??
-            
+
             // Right side: parse at same precedence for right-associativity
             // a ?? b ?? c  =>  a ?? (b ?? c)
             let right = self.parse_nil_coalescing_expr()?;
-            
+
             left = Expression::NilCoalescing(Box::new(NilCoalescingExpr {
                 primary: left,
                 fallback: right,
                 span,
             }));
         }
-        
+
         Ok(left)
     }
 
     fn parse_or_expr(&mut self) -> Result<Expression, ParseError> {
         let mut left = self.parse_and_expr()?;
-        
+
         while self.check(TokenKind::Or) {
             let span = self.current_span();
             self.advance();
@@ -883,13 +908,13 @@ impl Parser {
                 span,
             }));
         }
-        
+
         Ok(left)
     }
 
     fn parse_and_expr(&mut self) -> Result<Expression, ParseError> {
         let mut left = self.parse_equality_expr()?;
-        
+
         while self.check(TokenKind::And) {
             let span = self.current_span();
             self.advance();
@@ -901,22 +926,25 @@ impl Parser {
                 span,
             }));
         }
-        
+
         Ok(left)
     }
 
     fn parse_equality_expr(&mut self) -> Result<Expression, ParseError> {
         let mut left = self.parse_comparison_expr()?;
-        
+
         while let Some(op) = self.match_equality_op() {
             let span = self.current_span();
             self.advance();
             let right = self.parse_comparison_expr()?;
             left = Expression::Binary(Box::new(BinaryExpr {
-                left, operator: op, right, span,
+                left,
+                operator: op,
+                right,
+                span,
             }));
         }
-        
+
         Ok(left)
     }
 
@@ -930,16 +958,19 @@ impl Parser {
 
     fn parse_comparison_expr(&mut self) -> Result<Expression, ParseError> {
         let mut left = self.parse_additive_expr()?;
-        
+
         while let Some(op) = self.match_comparison_op() {
             let span = self.current_span();
             self.advance();
             let right = self.parse_additive_expr()?;
             left = Expression::Binary(Box::new(BinaryExpr {
-                left, operator: op, right, span,
+                left,
+                operator: op,
+                right,
+                span,
             }));
         }
-        
+
         Ok(left)
     }
 
@@ -955,16 +986,19 @@ impl Parser {
 
     fn parse_additive_expr(&mut self) -> Result<Expression, ParseError> {
         let mut left = self.parse_multiplicative_expr()?;
-        
+
         while let Some(op) = self.match_additive_op() {
             let span = self.current_span();
             self.advance();
             let right = self.parse_multiplicative_expr()?;
             left = Expression::Binary(Box::new(BinaryExpr {
-                left, operator: op, right, span,
+                left,
+                operator: op,
+                right,
+                span,
             }));
         }
-        
+
         Ok(left)
     }
 
@@ -978,16 +1012,19 @@ impl Parser {
 
     fn parse_multiplicative_expr(&mut self) -> Result<Expression, ParseError> {
         let mut left = self.parse_unary_expr()?;
-        
+
         while let Some(op) = self.match_multiplicative_op() {
             let span = self.current_span();
             self.advance();
             let right = self.parse_unary_expr()?;
             left = Expression::Binary(Box::new(BinaryExpr {
-                left, operator: op, right, span,
+                left,
+                operator: op,
+                right,
+                span,
             }));
         }
-        
+
         Ok(left)
     }
 
@@ -1006,10 +1043,12 @@ impl Parser {
             self.advance();
             let operand = self.parse_unary_expr()?;
             return Ok(Expression::Unary(Box::new(UnaryExpr {
-                operator: op, operand, span,
+                operator: op,
+                operand,
+                span,
             })));
         }
-        
+
         self.parse_postfix_expr()
     }
 
@@ -1023,14 +1062,14 @@ impl Parser {
 
     fn parse_postfix_expr(&mut self) -> Result<Expression, ParseError> {
         let mut expr = self.parse_primary_expr()?;
-        
+
         loop {
             // Regular member access (.)
             if self.check(TokenKind::Dot) {
                 let span = self.current_span();
                 self.advance();
                 let member = self.expect_identifier()?;
-                
+
                 // Check for method call: obj.method(args)
                 if self.check(TokenKind::LeftParen) {
                     self.advance();
@@ -1044,7 +1083,9 @@ impl Parser {
                     }));
                 } else {
                     // Check for unit suffix: 10.minutes
-                    if let Expression::Literal(Literal::Int(_)) | Expression::Literal(Literal::Float(_)) = &expr {
+                    if let Expression::Literal(Literal::Int(_))
+                    | Expression::Literal(Literal::Float(_)) = &expr
+                    {
                         expr = Expression::UnitValue(Box::new(UnitValueExpr {
                             value: expr,
                             unit: member,
@@ -1064,7 +1105,7 @@ impl Parser {
                 let span = self.current_span();
                 self.advance(); // consume ?.
                 let member = self.expect_identifier()?;
-                
+
                 // Check for optional method call: obj?.method(args)
                 if self.check(TokenKind::LeftParen) {
                     self.advance();
@@ -1108,18 +1149,17 @@ impl Parser {
                     index,
                     span,
                 }));
-            }
-            else {
+            } else {
                 break;
             }
         }
-        
+
         Ok(expr)
     }
 
     fn parse_arguments(&mut self) -> Result<Vec<Argument>, ParseError> {
         let mut args = Vec::new();
-        
+
         if !self.check(TokenKind::RightParen) {
             loop {
                 // Check for labeled argument: label: value
@@ -1135,16 +1175,16 @@ impl Parser {
                 } else {
                     (None, self.parse_expression()?)
                 };
-                
+
                 args.push(Argument { label, value });
-                
+
                 if !self.check(TokenKind::Comma) {
                     break;
                 }
                 self.advance();
             }
         }
-        
+
         Ok(args)
     }
 
@@ -1162,9 +1202,7 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Literal(Literal::String(s)))
             }
-            Some(TokenKind::InterpolatedString(parts)) => {
-                self.parse_interpolated_string(parts)
-            }
+            Some(TokenKind::InterpolatedString(parts)) => self.parse_interpolated_string(parts),
             Some(TokenKind::True) => {
                 self.advance();
                 Ok(Expression::Literal(Literal::Bool(true)))
@@ -1206,7 +1244,11 @@ impl Parser {
             }
             Some(TokenKind::FacetPath(prefix, handle, path)) => {
                 self.advance();
-                Ok(Expression::FacetPath { prefix, handle, path })
+                Ok(Expression::FacetPath {
+                    prefix,
+                    handle,
+                    path,
+                })
             }
             Some(TokenKind::LeftParen) => {
                 self.advance();
@@ -1219,16 +1261,16 @@ impl Parser {
                 let mut elements = Vec::new();
                 while !self.check(TokenKind::RightBracket) {
                     elements.push(self.parse_expression()?);
-                    if !self.check(TokenKind::Comma) { break; }
+                    if !self.check(TokenKind::Comma) {
+                        break;
+                    }
                     self.advance();
                 }
                 self.expect(TokenKind::RightBracket)?;
                 Ok(Expression::Array(elements))
             }
             // Object literal: { x: 10, y: 20 }
-            Some(TokenKind::LeftBrace) => {
-                self.parse_object_literal()
-            }
+            Some(TokenKind::LeftBrace) => self.parse_object_literal(),
             // Handle .enumVariant syntax (Swift-style shorthand)
             Some(TokenKind::Dot) => {
                 self.advance();
@@ -1236,29 +1278,25 @@ impl Parser {
                 Ok(Expression::Identifier(format!(".{}", variant)))
             }
             // Handle if expression: if cond { then } else { else }
-            Some(TokenKind::If) => {
-                self.parse_if_expression()
-            }
+            Some(TokenKind::If) => self.parse_if_expression(),
             // Handle search expression: search nearby ...
-            Some(TokenKind::Search) => {
-                self.parse_search_expression()
-            }
+            Some(TokenKind::Search) => self.parse_search_expression(),
             _ => Err(self.error("Expected expression")),
         }
     }
-    
+
     /// Parse an if expression (as opposed to if statement)
     /// Used when if appears in expression context: let x = if cond { a } else { b }
     fn parse_if_expression(&mut self) -> Result<Expression, ParseError> {
         let span = self.current_span();
         self.expect(TokenKind::If)?;
-        
+
         let condition = self.parse_expression()?;
         let then_branch = self.parse_block()?;
-        
+
         // If expressions must have an else branch to be complete expressions
         self.expect(TokenKind::Else)?;
-        
+
         let else_expr = if self.check(TokenKind::If) {
             // else if ... - recursively parse as another if expression
             self.parse_if_expression()?
@@ -1268,10 +1306,10 @@ impl Parser {
             // Convert block to expression
             Expression::Block(else_block)
         };
-        
+
         // Convert then_branch block to expression
         let then_expr = Expression::Block(then_branch);
-        
+
         Ok(Expression::Conditional(Box::new(ConditionalExpr {
             condition,
             then_expr,
@@ -1279,14 +1317,14 @@ impl Parser {
             span,
         })))
     }
-    
+
     /// Parse object literal: { field1: value1, field2: value2, ... }
     fn parse_object_literal(&mut self) -> Result<Expression, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::LeftBrace)?;
-        
+
         let mut fields = Vec::new();
-        
+
         // Empty object: {}
         if self.check(TokenKind::RightBrace) {
             self.advance();
@@ -1296,12 +1334,12 @@ impl Parser {
                 span: start,
             })));
         }
-        
+
         // Parse fields
         loop {
             let field = self.parse_object_field()?;
             fields.push(field);
-            
+
             // Check for comma or end
             if self.check(TokenKind::Comma) {
                 self.advance();
@@ -1313,9 +1351,9 @@ impl Parser {
                 break;
             }
         }
-        
+
         self.expect(TokenKind::RightBrace)?;
-        
+
         // Optional type hint: { x: 10 } as Point
         let type_hint = if self.check(TokenKind::As) {
             self.advance();
@@ -1323,19 +1361,19 @@ impl Parser {
         } else {
             None
         };
-        
+
         Ok(Expression::ObjectLiteral(Box::new(ObjectLiteralExpr {
             fields,
             type_hint,
             span: start,
         })))
     }
-    
+
     /// Parse a single object field: name: value OR name (shorthand)
     fn parse_object_field(&mut self) -> Result<ObjectField, ParseError> {
         let span = self.current_span();
         let name = self.expect_identifier()?;
-        
+
         // Check for value: name: expression
         let value = if self.check(TokenKind::Colon) {
             self.advance();
@@ -1344,10 +1382,10 @@ impl Parser {
             // Shorthand: { x } means { x: x }
             None
         };
-        
+
         Ok(ObjectField { name, value, span })
     }
-    
+
     /// Parse an interpolated string from lexer output
     fn parse_interpolated_string(
         &mut self,
@@ -1355,9 +1393,9 @@ impl Parser {
     ) -> Result<Expression, ParseError> {
         let span = self.current_span();
         self.advance(); // consume the InterpolatedString token
-        
+
         let mut parsed_parts = Vec::new();
-        
+
         for part in lexer_parts {
             match part {
                 StringPart::Literal(s) => {
@@ -1370,28 +1408,31 @@ impl Parser {
                 }
             }
         }
-        
-        Ok(Expression::InterpolatedString(Box::new(InterpolatedStringExpr {
-            parts: parsed_parts,
-            span,
-        })))
+
+        Ok(Expression::InterpolatedString(Box::new(
+            InterpolatedStringExpr {
+                parts: parsed_parts,
+                span,
+            },
+        )))
     }
-    
+
     /// Parse an expression from a string (used for interpolation)
     fn parse_embedded_expression(&mut self, source: &str) -> Result<Expression, ParseError> {
         // Tokenize the embedded expression
-        let tokens = ulissy_lexer::tokenize(source)
-            .map_err(|e| ParseError::new(
+        let tokens = ulissy_lexer::tokenize(source).map_err(|e| {
+            ParseError::new(
                 &format!("Error in interpolation: {}", e.message),
                 e.line,
                 e.column,
-            ))?;
-        
+            )
+        })?;
+
         // Create a sub-parser for the expression
         let mut sub_parser = Parser::new(tokens);
         sub_parser.parse_expression()
     }
-    
+
     /// Accept identifier OR keyword as identifier (for .public, .private, etc.)
     fn expect_identifier_or_keyword(&mut self) -> Result<String, ParseError> {
         match self.peek_kind().cloned() {
@@ -1423,7 +1464,7 @@ impl Parser {
     fn parse_search_expression(&mut self) -> Result<Expression, ParseError> {
         let span = self.current_span();
         self.expect(TokenKind::Search)?;
-        
+
         // Parse target
         let target = match self.peek_kind() {
             // search nearby  OR  search nearby(500.meters)
@@ -1439,7 +1480,7 @@ impl Parser {
                 };
                 SearchTarget::Nearby { radius }
             }
-            
+
             // search within(location, distance)
             Some(TokenKind::Within) => {
                 self.advance();
@@ -1453,7 +1494,7 @@ impl Parser {
                     radius: Box::new(radius),
                 }
             }
-            
+
             // search @alice  OR  search dix@alice
             Some(TokenKind::Handle(_)) | Some(TokenKind::FacetAddress(_, _)) => {
                 let handle_expr = self.parse_expression()?;
@@ -1461,7 +1502,7 @@ impl Parser {
                     handle: Box::new(handle_expr),
                 }
             }
-            
+
             // search "electrician"
             Some(TokenKind::StringLiteral(_)) => {
                 let query_expr = self.parse_expression()?;
@@ -1469,28 +1510,28 @@ impl Parser {
                     query: Box::new(query_expr),
                 }
             }
-            
+
             _ => {
                 return Err(self.error(
-                    "Expected search target: nearby, within(center, radius), @handle, or \"text\""
+                    "Expected search target: nearby, within(center, radius), @handle, or \"text\"",
                 ));
             }
         };
-        
+
         // Parse filters: where ...
         let filters = if self.check(TokenKind::Where) {
             self.parse_search_filters()?
         } else {
             Vec::new()
         };
-        
+
         // Parse ranking: ranked by trust desc
         let ranking = if self.check(TokenKind::Ranked) {
             Some(self.parse_search_ranking()?)
         } else {
             None
         };
-        
+
         Ok(Expression::Search(Box::new(SearchExpr {
             target,
             filters,
@@ -1502,21 +1543,21 @@ impl Parser {
     fn parse_search_filters(&mut self) -> Result<Vec<SearchFilter>, ParseError> {
         self.expect(TokenKind::Where)?;
         let mut filters = Vec::new();
-        
+
         loop {
             let filter = self.parse_single_search_filter()?;
             filters.push(filter);
-            
+
             if self.check(TokenKind::Comma) {
                 self.advance();
             } else {
                 break;
             }
         }
-        
+
         Ok(filters)
     }
-    
+
     fn parse_single_search_filter(&mut self) -> Result<SearchFilter, ParseError> {
         // Check for semantic filter keywords
         match self.peek_kind() {
@@ -1526,28 +1567,28 @@ impl Parser {
                 let value = self.parse_expression()?;
                 Ok(SearchFilter::TrustThreshold { op, value })
             }
-            
+
             Some(TokenKind::Identifier(ref s)) if s == "facet" => {
                 self.advance();
                 self.expect(TokenKind::EqualEqual)?;
                 let facet_name = self.parse_expression()?;
                 Ok(SearchFilter::FacetMatch { facet_name })
             }
-            
+
             Some(TokenKind::Identifier(ref s)) if s == "active" => {
                 self.advance();
                 self.expect(TokenKind::Within)?;
                 let duration = self.parse_expression()?;
                 Ok(SearchFilter::ActiveWithin { duration })
             }
-            
+
             Some(TokenKind::Identifier(ref s)) if s == "org" => {
                 self.advance();
                 self.expect(TokenKind::EqualEqual)?;
                 let org_name = self.parse_expression()?;
                 Ok(SearchFilter::OrgMatch { org_name })
             }
-            
+
             // Fallback: generic field op value (backward compatible)
             _ => {
                 let field = self.expect_identifier()?;
@@ -1557,7 +1598,7 @@ impl Parser {
             }
         }
     }
-    
+
     fn parse_search_comparison_op(&mut self) -> Result<ComparisonOp, ParseError> {
         let op = match self.peek_kind() {
             Some(TokenKind::EqualEqual) => ComparisonOp::Equal,
@@ -1575,9 +1616,9 @@ impl Parser {
     fn parse_search_ranking(&mut self) -> Result<SearchRanking, ParseError> {
         self.expect(TokenKind::Ranked)?;
         self.expect(TokenKind::By)?;
-        
+
         let field = self.expect_identifier()?;
-        
+
         // Parse optional order (default: descending)
         let order = if let Some(TokenKind::Identifier(ref s)) = self.peek_kind() {
             match s.as_str() {
@@ -1594,15 +1635,16 @@ impl Parser {
         } else {
             SortOrder::Descending
         };
-        
+
         match field.as_str() {
             "trust" => Ok(SearchRanking::Trust { order }),
             "distance" => Ok(SearchRanking::Distance { order }),
             "recency" | "age" => Ok(SearchRanking::Recency { order }),
             "relevance" => Ok(SearchRanking::Relevance { order }),
-            _ => Err(self.error(
-                &format!("Unknown ranking key '{}'. Expected: trust, distance, recency, relevance", field)
-            )),
+            _ => Err(self.error(&format!(
+                "Unknown ranking key '{}'. Expected: trust, distance, recency, relevance",
+                field
+            ))),
         }
     }
 
@@ -1612,19 +1654,19 @@ impl Parser {
 
     fn parse_type_expr(&mut self) -> Result<TypeExpr, ParseError> {
         let base = self.parse_base_type()?;
-        
+
         // Check for optional: Type?
         if self.check(TokenKind::Question) {
             self.advance();
             return Ok(TypeExpr::Optional(Box::new(base)));
         }
-        
+
         Ok(base)
     }
 
     fn parse_base_type(&mut self) -> Result<TypeExpr, ParseError> {
         let name = self.expect_identifier()?;
-        
+
         // Check for generic: Type<Param>
         if self.check(TokenKind::Less) {
             self.advance();
@@ -1636,7 +1678,7 @@ impl Parser {
             self.expect(TokenKind::Greater)?;
             return Ok(TypeExpr::Generic { name, params });
         }
-        
+
         Ok(TypeExpr::Simple(name))
     }
 
@@ -1647,15 +1689,18 @@ impl Parser {
     fn parse_block(&mut self) -> Result<Block, ParseError> {
         let start = self.current_span();
         self.expect(TokenKind::LeftBrace)?;
-        
+
         let mut statements = Vec::new();
         while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
             statements.push(self.parse_statement()?);
         }
-        
+
         self.expect(TokenKind::RightBrace)?;
-        
-        Ok(Block { statements, span: start })
+
+        Ok(Block {
+            statements,
+            span: start,
+        })
     }
 
     // ========================================================================
@@ -1714,9 +1759,7 @@ impl Parser {
     }
 
     fn error(&self, message: &str) -> ParseError {
-        let (line, column) = self.peek()
-            .map(|t| (t.line, t.column))
-            .unwrap_or((0, 0));
+        let (line, column) = self.peek().map(|t| (t.line, t.column)).unwrap_or((0, 0));
         ParseError::new(message, line, column)
     }
 }

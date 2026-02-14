@@ -22,61 +22,61 @@ pub struct Program {
 pub enum Statement {
     /// identity me = Keychain.primary
     IdentityDecl(IdentityDecl),
-    
+
     /// let x = expr
     LetDecl(LetDecl),
-    
+
     /// var x = expr
     VarDecl(VarDecl),
-    
+
     /// const X = expr
     ConstDecl(ConstDecl),
-    
+
     /// fn name(params) -> ReturnType { body }
     FnDecl(FnDecl),
-    
+
     /// type Name { fields }
     TypeDecl(TypeDecl),
-    
+
     /// enum Name { variant1, variant2, ... }
     EnumDecl(EnumDecl),
-    
+
     /// every 10.minutes { ... }
     EveryBlock(EveryBlock),
-    
+
     /// when condition { ... }
     WhenBlock(WhenBlock),
-    
+
     /// after 5.seconds { ... }
     AfterBlock(AfterBlock),
-    
+
     /// send to @handle { ... }
     SendStatement(SendStatement),
-    
+
     /// if condition { ... } else { ... }
     IfStatement(IfStatement),
 
     /// if let binding = optional_expr { ... } else { ... }
     IfLetStatement(IfLetStatement),
-    
+
     /// match expr { cases }
     MatchStatement(MatchStatement),
-    
+
     /// return expr
     ReturnStatement(ReturnStatement),
-    
+
     /// Expression as statement (e.g., function call)
     ExpressionStatement(Expression),
-    
+
     /// import module.path
     ImportStatement(ImportStatement),
-    
+
     /// config { field: value, ... }
     ConfigBlock(ConfigBlock),
-    
+
     /// computed name: Type = expr  OR  computed name: Type { fields }
     ComputedPropertyDecl(ComputedPropertyDecl),
-    
+
     /// for item in collection { body }
     ForStatement(ForStatement),
 }
@@ -172,13 +172,13 @@ pub struct FieldDecl {
 pub struct EnumDecl {
     /// The enum name (e.g., "LocationSource")
     pub name: String,
-    
+
     /// Generic type parameters (e.g., ["T", "E"] for Result<T, E>)
     pub type_params: Vec<String>,
-    
+
     /// The enum variants
     pub variants: Vec<EnumVariant>,
-    
+
     /// Source location
     pub span: Span,
 }
@@ -191,13 +191,13 @@ pub struct EnumDecl {
 pub struct EnumVariant {
     /// Variant name (e.g., "gps", "ok")
     pub name: String,
-    
+
     /// Associated types, if any
     /// None = simple variant like `gps`
     /// Some([]) = empty tuple like `none()`
     /// Some([Type]) = single value like `ok(T)`
     pub associated_types: Option<Vec<TypeExpr>>,
-    
+
     /// Named fields for record-style variants (future)
     /// e.g., `point(x: Int, y: Int)`
     pub named_fields: Option<Vec<(String, TypeExpr)>>,
@@ -207,12 +207,16 @@ impl fmt::Display for EnumDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "enum {} {{ ", self.name)?;
         for (i, variant) in self.variants.iter().enumerate() {
-            if i > 0 { write!(f, ", ")?; }
+            if i > 0 {
+                write!(f, ", ")?;
+            }
             write!(f, "{}", variant.name)?;
             if let Some(types) = &variant.associated_types {
                 write!(f, "(")?;
                 for (j, ty) in types.iter().enumerate() {
-                    if j > 0 { write!(f, ", ")?; }
+                    if j > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{:?}", ty)?;
                 }
                 write!(f, ")")?;
@@ -355,7 +359,7 @@ pub struct ForStatement {
 // ============================================================================
 
 /// Configuration block - module-level settings
-/// 
+///
 /// Example:
 /// ```ulissy
 /// config {
@@ -383,14 +387,14 @@ pub struct ConfigField {
 // ============================================================================
 
 /// Standalone computed property - module-level reactive value
-/// 
+///
 /// Example:
 /// ```ulissy
 /// computed status: CollectionStatus {
 ///     isActive: collection.running,
 ///     totalCount: me.trajectory.count
 /// }
-/// 
+///
 /// computed total: Int = items.count
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -418,82 +422,86 @@ pub enum ComputedBody {
 pub enum Expression {
     /// Literal values: 42, 3.14, "hello", true
     Literal(Literal),
-    
+
     /// Variable reference: x, me, Keychain
     Identifier(String),
-    
+
     /// @handle
     Handle(String),
-    
+
     /// dix@alice, pay@merchant
     FacetAddress { prefix: String, handle: String },
-    
+
     /// home@alice/lights
-    FacetPath { prefix: String, handle: String, path: String },
-    
+    FacetPath {
+        prefix: String,
+        handle: String,
+        path: String,
+    },
+
     /// Binary operation: a + b, x == y
     Binary(Box<BinaryExpr>),
-    
+
     /// Unary operation: !x, -y
     Unary(Box<UnaryExpr>),
-    
+
     /// Member access: obj.field
     Member(Box<MemberExpr>),
-    
+
     /// Function call: foo(a, b)
     Call(Box<CallExpr>),
-    
+
     /// Method call: obj.method(a, b)
     MethodCall(Box<MethodCallExpr>),
-    
+
     /// Index access: arr[0]
     Index(Box<IndexExpr>),
-    
+
     /// Array literal: [1, 2, 3]
     Array(Vec<Expression>),
-    
+
     /// Dictionary literal: ["a": 1, "b": 2]
     Dictionary(Vec<(Expression, Expression)>),
-    
+
     /// Lambda: { |x| x + 1 }
     Lambda(Box<LambdaExpr>),
-    
+
     /// Conditional: if cond { a } else { b }
     Conditional(Box<ConditionalExpr>),
-    
+
     /// Optional member access: obj?.member
     /// Returns None if obj is None, otherwise returns obj.member
     OptionalMember(Box<OptionalMemberExpr>),
-    
+
     /// Optional method call: obj?.method(args)
     /// Returns None if obj is None, otherwise calls method
     OptionalMethodCall(Box<OptionalMethodCallExpr>),
-    
+
     /// Nil coalescing: expr ?? default
     /// Returns expr if not nil, otherwise returns default
     NilCoalescing(Box<NilCoalescingExpr>),
-    
+
     /// Breadcrumb constructor (ULissy-specific)
     Breadcrumb(Box<BreadcrumbExpr>),
-    
+
     /// Unit value with suffix: 10.minutes, 500.meters
     UnitValue(Box<UnitValueExpr>),
-    
+
     /// Block expression
     Block(Block),
-    
+
     /// Grouped expression: (expr)
     Grouped(Box<Expression>),
-    
+
     /// Object literal: { field1: value1, field2: value2 }
     ObjectLiteral(Box<ObjectLiteralExpr>),
-    
+
     /// Interpolated string: "Hello, \(name)!"
     InterpolatedString(Box<InterpolatedStringExpr>),
-    
+
     /// Assignment expression: x = expr
     Assignment(Box<AssignmentExpr>),
-    
+
     /// Search expression: search nearby where ...
     Search(Box<SearchExpr>),
 }
@@ -509,15 +517,27 @@ pub struct BinaryExpr {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
     // Arithmetic
-    Add, Sub, Mul, Div, Mod,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
     // Comparison
-    Eq, NotEq, Lt, Gt, LtEq, GtEq,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
     // Logical
-    And, Or,
+    And,
+    Or,
     // Range
-    Range, RangeExclusive,
+    Range,
+    RangeExclusive,
     // Spatial (ULissy-specific)
-    Within, Near,
+    Within,
+    Near,
 }
 
 impl fmt::Display for BinaryOp {
@@ -553,8 +573,8 @@ pub struct UnaryExpr {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOp {
-    Neg,    // -x
-    Not,    // !x
+    Neg, // -x
+    Not, // !x
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -586,9 +606,9 @@ pub struct MethodCallExpr {
 }
 
 /// Optional member access expression: obj?.member
-/// 
+///
 /// Example: `me.trajectory.last?.hash`
-/// 
+///
 /// Semantics: If the object is None/nil, the entire expression evaluates
 /// to None. Otherwise, access the member as normal.
 #[derive(Debug, Clone, PartialEq)]
@@ -602,9 +622,9 @@ pub struct OptionalMemberExpr {
 }
 
 /// Optional method call expression: obj?.method(args)
-/// 
+///
 /// Example: `me.trajectory.last?.signed(me)`
-/// 
+///
 /// Semantics: If the object is None/nil, the entire expression evaluates
 /// to None without calling the method. Otherwise, call the method.
 #[derive(Debug, Clone, PartialEq)]
@@ -620,9 +640,9 @@ pub struct OptionalMethodCallExpr {
 }
 
 /// Nil coalescing expression: expr ?? default
-/// 
+///
 /// Example: `prevHash ?? "genesis"`
-/// 
+///
 /// Semantics: If expr is None/nil, return default. Otherwise return expr.
 /// This is equivalent to Rust's `.unwrap_or()` or Swift's `??`.
 #[derive(Debug, Clone, PartialEq)]
@@ -642,10 +662,10 @@ pub struct NilCoalescingExpr {
 pub struct ObjectLiteralExpr {
     /// The fields of the object
     pub fields: Vec<ObjectField>,
-    
+
     /// Optional type hint: { x: 10, y: 20 } as Point
     pub type_hint: Option<String>,
-    
+
     /// Source location
     pub span: Span,
 }
@@ -655,11 +675,11 @@ pub struct ObjectLiteralExpr {
 pub struct ObjectField {
     /// Field name
     pub name: String,
-    
+
     /// Field value
     /// None for shorthand: { x } means { x: x }
     pub value: Option<Expression>,
-    
+
     /// Source location
     pub span: Span,
 }
@@ -673,7 +693,7 @@ impl ObjectLiteralExpr {
             span,
         }
     }
-    
+
     /// Check if object has a field
     pub fn has_field(&self, name: &str) -> bool {
         self.fields.iter().any(|f| f.name == name)
@@ -689,7 +709,7 @@ impl ObjectField {
             span,
         }
     }
-    
+
     /// Create a shorthand field: { x } meaning { x: x }
     pub fn shorthand(name: String, span: Span) -> Self {
         ObjectField {
@@ -704,7 +724,9 @@ impl std::fmt::Display for ObjectLiteralExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{ ")?;
         for (i, field) in self.fields.iter().enumerate() {
-            if i > 0 { write!(f, ", ")?; }
+            if i > 0 {
+                write!(f, ", ")?;
+            }
             write!(f, "{}", field.name)?;
             if let Some(value) = &field.value {
                 write!(f, ": {:?}", value)?;
@@ -725,7 +747,7 @@ impl std::fmt::Display for ObjectLiteralExpr {
 pub struct InterpolatedStringExpr {
     /// The parts of the string (literals and expressions)
     pub parts: Vec<InterpolatedPart>,
-    
+
     /// Source location
     pub span: Span,
 }
@@ -735,7 +757,7 @@ pub struct InterpolatedStringExpr {
 pub enum InterpolatedPart {
     /// Literal text: "Hello, "
     Literal(String),
-    
+
     /// Expression to interpolate: \(name)
     Expression(Expression),
 }
@@ -807,13 +829,16 @@ pub struct SearchExpr {
 pub enum SearchTarget {
     /// search nearby(500.meters) — spatial discovery relative to current location
     Nearby { radius: Option<Expression> },
-    
+
     /// search within(location, 2.kilometers) — spatial around specific point
-    Within { center: Box<Expression>, radius: Box<Expression> },
-    
+    Within {
+        center: Box<Expression>,
+        radius: Box<Expression>,
+    },
+
     /// search @alice — direct identity/facet lookup
     Identity { handle: Box<Expression> },
-    
+
     /// search "electrician" — text/semantic search
     Text { query: Box<Expression> },
 }
@@ -822,18 +847,22 @@ pub enum SearchTarget {
 pub enum SearchFilter {
     /// trust > 3.0 — trust threshold with comparison operator
     TrustThreshold { op: ComparisonOp, value: Expression },
-    
+
     /// facet == "medical" — match specific facet type
     FacetMatch { facet_name: Expression },
-    
+
     /// active within 1.hours — temporal activity filter
     ActiveWithin { duration: Expression },
-    
+
     /// org == "hospital_network" — organization membership
     OrgMatch { org_name: Expression },
-    
+
     /// Generic field comparison (backward compatible with existing code)
-    FieldCompare { field: String, op: ComparisonOp, value: Expression },
+    FieldCompare {
+        field: String,
+        op: ComparisonOp,
+        value: Expression,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -886,19 +915,22 @@ pub enum Literal {
 pub enum TypeExpr {
     /// Simple type: Int, String, Handle
     Simple(String),
-    
+
     /// Generic type: Array<Int>, Envelope<Message>
     Generic { name: String, params: Vec<TypeExpr> },
-    
+
     /// Optional type: Handle?
     Optional(Box<TypeExpr>),
-    
+
     /// Function type: (Int, Int) -> Int
-    Function { params: Vec<TypeExpr>, return_type: Box<TypeExpr> },
-    
+    Function {
+        params: Vec<TypeExpr>,
+        return_type: Box<TypeExpr>,
+    },
+
     /// Tuple type: (Int, String)
     Tuple(Vec<TypeExpr>),
-    
+
     /// Union type: String | Int
     Union(Vec<TypeExpr>),
 }
@@ -932,13 +964,23 @@ pub struct Span {
 
 impl Span {
     pub fn new(start_line: usize, start_column: usize, end_line: usize, end_column: usize) -> Self {
-        Span { start_line, start_column, end_line, end_column }
+        Span {
+            start_line,
+            start_column,
+            end_line,
+            end_column,
+        }
     }
-    
+
     pub fn from_position(line: usize, column: usize) -> Self {
-        Span { start_line: line, start_column: column, end_line: line, end_column: column }
+        Span {
+            start_line: line,
+            start_column: column,
+            end_line: line,
+            end_column: column,
+        }
     }
-    
+
     pub fn merge(&self, other: &Span) -> Span {
         Span {
             start_line: self.start_line,
@@ -958,8 +1000,16 @@ impl Program {
         let mut output = String::new();
         output.push_str("Program\n");
         for (i, stmt) in self.statements.iter().enumerate() {
-            let prefix = if i == self.statements.len() - 1 { "└── " } else { "├── " };
-            let child_prefix = if i == self.statements.len() - 1 { "    " } else { "│   " };
+            let prefix = if i == self.statements.len() - 1 {
+                "└── "
+            } else {
+                "├── "
+            };
+            let child_prefix = if i == self.statements.len() - 1 {
+                "    "
+            } else {
+                "│   "
+            };
             output.push_str(&stmt.pretty_print(prefix, child_prefix));
         }
         output
@@ -970,12 +1020,16 @@ impl Statement {
     fn pretty_print(&self, prefix: &str, child_prefix: &str) -> String {
         match self {
             Statement::IdentityDecl(decl) => {
-                format!("{}IdentityDecl: {}\n{}└── init: {:?}\n", 
-                    prefix, decl.name, child_prefix, decl.initializer)
+                format!(
+                    "{}IdentityDecl: {}\n{}└── init: {:?}\n",
+                    prefix, decl.name, child_prefix, decl.initializer
+                )
             }
             Statement::LetDecl(decl) => {
-                format!("{}LetDecl: {}\n{}└── init: {:?}\n",
-                    prefix, decl.name, child_prefix, decl.initializer)
+                format!(
+                    "{}LetDecl: {}\n{}└── init: {:?}\n",
+                    prefix, decl.name, child_prefix, decl.initializer
+                )
             }
             Statement::VarDecl(decl) => {
                 format!("{}VarDecl: {}\n", prefix, decl.name)
@@ -985,12 +1039,24 @@ impl Statement {
                     prefix, child_prefix, block.interval, child_prefix, block.condition, child_prefix, block.body.statements.len())
             }
             Statement::WhenBlock(block) => {
-                format!("{}WhenBlock\n{}├── condition: {:?}\n{}└── body: {} statements\n",
-                    prefix, child_prefix, block.condition, child_prefix, block.body.statements.len())
+                format!(
+                    "{}WhenBlock\n{}├── condition: {:?}\n{}└── body: {} statements\n",
+                    prefix,
+                    child_prefix,
+                    block.condition,
+                    child_prefix,
+                    block.body.statements.len()
+                )
             }
             Statement::SendStatement(send) => {
-                format!("{}SendStatement\n{}├── to: {:?}\n{}└── fields: {} entries\n",
-                    prefix, child_prefix, send.recipient, child_prefix, send.fields.len())
+                format!(
+                    "{}SendStatement\n{}├── to: {:?}\n{}└── fields: {} entries\n",
+                    prefix,
+                    child_prefix,
+                    send.recipient,
+                    child_prefix,
+                    send.fields.len()
+                )
             }
             Statement::ExpressionStatement(expr) => {
                 format!("{}ExpressionStmt: {:?}\n", prefix, expr)
