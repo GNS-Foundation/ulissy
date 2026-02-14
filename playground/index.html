@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ULissy Playground — A Language for Moving Machines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f1117;
+  --bg-panel: #161822;
+  --bg-editor: #1a1d2e;
+  --bg-hover: #1e2235;
+  --bg-active: #252940;
+  --border: #2a2e42;
+  --border-light: #353a52;
+  --text: #e2e4f0;
+  --text-dim: #8b8fa8;
+  --text-faint: #5c6080;
+  --primary: #6366f1;
+  --primary-dim: #4f46e5;
+  --primary-glow: rgba(99,102,241,0.15);
+  --accent-green: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-rose: #f43f5e;
+  --accent-cyan: #22d3ee;
+  --accent-purple: #a78bfa;
+  /* Syntax */
+  --syn-keyword: #c792ea;
+  --syn-fn: #82aaff;
+  --syn-string: #c3e88d;
+  --syn-number: #f78c6c;
+  --syn-comment: #546e7a;
+  --syn-type: #ffcb6b;
+  --syn-operator: #89ddff;
+  --syn-handle: #22d3ee;
+  --syn-facet: #f0abfc;
+  --syn-unit: #fbbf24;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══ HEADER ═══ */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 52px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mark {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, var(--primary), var(--accent-purple));
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Serif Display', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+}
+
+.logo-text {
+  font-family: 'DM Serif Display', serif;
+  font-size: 18px;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
+
+.logo-tag {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.header-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-links a {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.2s;
+}
+
+.header-links a:hover { color: var(--text); }
+
+.header-links a.github {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ═══ TOOLBAR ═══ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  height: 40px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.toolbar select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 28px 4px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238b8fa8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.toolbar select:hover { border-color: var(--border-light); }
+
+.toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+
+.btn {
+  padding: 5px 14px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-light); }
+.btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
+.btn.primary:hover { background: var(--primary-dim); }
+
+.toolbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+.status {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ═══ MAIN LAYOUT ═══ */
+.main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ═══ EDITOR PANEL ═══ */
+.editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 32px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.panel-header .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.panel-header .dot.green { background: var(--accent-green); }
+.panel-header .dot.amber { background: var(--accent-amber); }
+.panel-header .dot.cyan { background: var(--accent-cyan); }
+
+.editor-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.line-numbers {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  padding-top: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-faint);
+  text-align: right;
+  padding-right: 12px;
+  user-select: none;
+  overflow: hidden;
+}
+
+#editor {
+  position: absolute;
+  left: 48px;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-editor);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 12px 16px;
+  border: none;
+  outline: none;
+  resize: none;
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+}
+
+#editor::selection { background: var(--primary-glow); }
+
+/* ═══ OUTPUT PANEL ═══ */
+.output-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.output-tabs {
+  display: flex;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.output-tab {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.output-tab:hover { color: var(--text); background: var(--bg-hover); }
+
+.output-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.output-content {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  background: var(--bg-editor);
+}
+
+.output-view { display: none; }
+.output-view.active { display: block; }
+
+/* ═══ TOKEN DISPLAY ═══ */
+.token-row {
+  display: flex;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(42,46,66,0.5);
+}
+
+.token-pos {
+  color: var(--text-faint);
+  width: 50px;
+  flex-shrink: 0;
+}
+
+.token-kind {
+  width: 160px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.token-lexeme {
+  color: var(--text-dim);
+}
+
+.tk-keyword { color: var(--syn-keyword); }
+.tk-ident { color: var(--syn-fn); }
+.tk-string { color: var(--syn-string); }
+.tk-number { color: var(--syn-number); }
+.tk-operator { color: var(--syn-operator); }
+.tk-handle { color: var(--syn-handle); }
+.tk-facet { color: var(--syn-facet); }
+.tk-type { color: var(--syn-type); }
+.tk-delim { color: var(--text-dim); }
+.tk-unit { color: var(--syn-unit); }
+
+/* ═══ AST DISPLAY ═══ */
+.ast-node {
+  padding-left: 20px;
+  position: relative;
+}
+
+.ast-node::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.ast-label {
+  color: var(--accent-purple);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ast-label:hover { color: var(--primary); }
+
+.ast-value { color: var(--syn-string); }
+.ast-type { color: var(--syn-type); }
+.ast-op { color: var(--syn-operator); }
+
+/* ═══ ERRORS ═══ */
+.error-line {
+  color: var(--accent-rose);
+  padding: 4px 0;
+}
+
+.error-line .err-pos {
+  color: var(--text-dim);
+  margin-right: 8px;
+}
+
+/* ═══ GENERATED RUST ═══ */
+.rust-output {
+  color: var(--text);
+}
+
+.rust-output .r-kw { color: var(--syn-keyword); }
+.rust-output .r-fn { color: var(--syn-fn); }
+.rust-output .r-str { color: var(--syn-string); }
+.rust-output .r-num { color: var(--syn-number); }
+.rust-output .r-cm { color: var(--syn-comment); }
+.rust-output .r-ty { color: var(--syn-type); }
+.rust-output .r-mac { color: var(--accent-cyan); }
+
+/* ═══ INFO PANEL ═══ */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.info-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+}
+
+.info-card h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.info-card .val {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.info-card .sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+/* ═══ FOOTER ═══ */
+footer {
+  height: 24px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 11px;
+  color: var(--text-faint);
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+footer a { color: var(--text-dim); text-decoration: none; }
+footer a:hover { color: var(--text); }
+
+/* ═══ RESPONSIVE ═══ */
+@media (max-width: 768px) {
+  .main { flex-direction: column; }
+  .editor-panel { border-right: none; border-bottom: 1px solid var(--border); flex: none; height: 45vh; }
+  .output-panel { flex: 1; }
+  .logo-tag { display: none; }
+  .header-links span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">U</div>
+    <span class="logo-text">ULissy</span>
+    <span class="logo-tag">v0.4.2 playground</span>
+  </div>
+  <div class="header-links">
+    <a href="https://github.com/GNS-Foundation/ulissy/blob/main/docs/whitepaper/WHITEPAPER.md">Whitepaper</a>
+    <a href="https://github.com/GNS-Foundation/ulissy/blob/main/docs/GRAMMAR.md">Grammar</a>
+    <a href="https://github.com/GNS-Foundation/ulissy" class="github">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      <span>Source</span>
+    </a>
+  </div>
+</header>
+
+<div class="toolbar">
+  <select id="examples" onchange="loadExample(this.value)">
+    <option value="">▾ Examples</option>
+    <option value="breadcrumb">Breadcrumb Collection</option>
+    <option value="search">Spatial Search</option>
+    <option value="messaging">Encrypted Messaging</option>
+    <option value="trust">Trust Scoring</option>
+    <option value="iot">IoT Control</option>
+    <option value="types">Type System</option>
+  </select>
+  <div class="toolbar-sep"></div>
+  <button class="btn primary" onclick="analyze()">▸ Analyze</button>
+  <button class="btn" onclick="clearEditor()">Clear</button>
+  <div class="toolbar-right">
+    <span class="status" id="status">Ready</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="editor-panel">
+    <div class="panel-header"><div class="dot green"></div>source.ul</div>
+    <div class="editor-wrap">
+      <div class="line-numbers" id="lineNums"></div>
+      <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+    </div>
+  </div>
+
+  <div class="output-panel">
+    <div class="output-tabs">
+      <div class="output-tab active" onclick="switchTab('tokens')">Tokens</div>
+      <div class="output-tab" onclick="switchTab('ast')">AST</div>
+      <div class="output-tab" onclick="switchTab('rust')">Rust Output</div>
+      <div class="output-tab" onclick="switchTab('info')">Info</div>
+    </div>
+    <div class="output-content">
+      <div class="output-view active" id="view-tokens"></div>
+      <div class="output-view" id="view-ast"></div>
+      <div class="output-view" id="view-rust"></div>
+      <div class="output-view" id="view-info"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>"The journey is the proof." — ULissy</span>
+  <span><a href="https://github.com/GNS-Foundation/ulissy">GNS Foundation</a> · MIT License</span>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// ULissy Lexer — JavaScript port of compiler/crates/ulissy-lexer/src/lib.rs
+// ═══════════════════════════════════════════════════════════════════════════
+
+const KEYWORDS = new Set([
+  'identity','let','var','const','fn','type','struct','enum','trait','impl',
+  'if','else','match','case','guard','for','while','in','where','when',
+  'every','after','within','timeout','budget','send','to','from','as','with',
+  'return','throw','throws','async','await','import','export','public',
+  'private','internal','true','false','nil','self','Self','computed',
+  'invariant','config','search','default','ranked','by','asc','desc',
+  'nearby','active'
+]);
+
+const UNITS = new Set([
+  'meters','kilometers','miles','seconds','minutes','hours','days',
+  'percent','USD','EUR','GBP'
+]);
+
+const TYPES = new Set([
+  'Int','Float','String','Bool','Bytes','Uint32','Uint64',
+  'PublicKey','PrivateKey','Signature','Handle','TIT','SharedSecret',
+  'H3Cell','Location','Distance','Coordinates',
+  'Moment','Duration','Interval',
+  'Hash','Ciphertext','Nonce',
+  'BatteryLevel','PowerMode',
+  'Breadcrumb','Trajectory','Epoch','Identity',
+  'Array','Chain','Envelope','Optional'
+]);
+
+function tokenize(source) {
+  const tokens = [];
+  let i = 0, line = 1, col = 1;
+
+  function peek() { return i < source.length ? source[i] : null; }
+  function peek2() { return i+1 < source.length ? source[i+1] : null; }
+  function advance() {
+    const c = source[i++];
+    if (c === '\n') { line++; col = 1; } else { col++; }
+    return c;
+  }
+  function addToken(kind, lexeme, cls) {
+    tokens.push({ kind, lexeme, line: tokens._line || line, col: tokens._col || col, cls: cls || kindClass(kind) });
+  }
+
+  function kindClass(kind) {
+    if (KEYWORDS.has(kind)) return 'tk-keyword';
+    if (kind === 'IDENTIFIER') return 'tk-ident';
+    if (kind === 'INT' || kind === 'FLOAT') return 'tk-number';
+    if (kind === 'STRING') return 'tk-string';
+    if (kind === 'HANDLE') return 'tk-handle';
+    if (kind === 'FACET' || kind === 'FACET_PATH') return 'tk-facet';
+    if (kind === 'UNIT') return 'tk-unit';
+    if (['PLUS','MINUS','STAR','SLASH','PERCENT','EQ','EQEQ','NEQ','LT','GT','LTEQ','GTEQ','AND','OR','NOT','ARROW','FAT_ARROW','QUESTION','DOUBLE_QUESTION','QUESTION_DOT','DOT_DOT','DOT_DOT_LT','PLUS_EQ','MINUS_EQ','STAR_EQ','SLASH_EQ'].includes(kind)) return 'tk-operator';
+    return 'tk-delim';
+  }
+
+  while (i < source.length) {
+    // Skip whitespace
+    while (i < source.length && /\s/.test(source[i])) advance();
+    if (i >= source.length) break;
+
+    // Skip comments
+    if (peek() === '/' && peek2() === '/') {
+      while (i < source.length && source[i] !== '\n') advance();
+      continue;
+    }
+    if (peek() === '/' && peek2() === '*') {
+      advance(); advance();
+      let depth = 1;
+      while (depth > 0 && i < source.length) {
+        if (peek() === '/' && peek2() === '*') { advance(); advance(); depth++; }
+        else if (peek() === '*' && peek2() === '/') { advance(); advance(); depth--; }
+        else advance();
+      }
+      continue;
+    }
+
+    const sLine = line, sCol = col;
+    tokens._line = sLine; tokens._col = sCol;
+    const c = advance();
+
+    // Delimiters
+    if (c === '(') { addToken('LPAREN', '('); continue; }
+    if (c === ')') { addToken('RPAREN', ')'); continue; }
+    if (c === '{') { addToken('LBRACE', '{'); continue; }
+    if (c === '}') { addToken('RBRACE', '}'); continue; }
+    if (c === '[') { addToken('LBRACKET', '['); continue; }
+    if (c === ']') { addToken('RBRACKET', ']'); continue; }
+    if (c === ',') { addToken('COMMA', ','); continue; }
+    if (c === ';') { addToken('SEMICOLON', ';'); continue; }
+    if (c === ':') { addToken('COLON', ':'); continue; }
+
+    // Dot / Range
+    if (c === '.') {
+      if (peek() === '.' && peek2() === '<') { advance(); advance(); addToken('DOT_DOT_LT', '..<'); }
+      else if (peek() === '.') { advance(); addToken('DOT_DOT', '..'); }
+      else addToken('DOT', '.');
+      continue;
+    }
+
+    // Operators
+    if (c === '+') { if (peek() === '=') { advance(); addToken('PLUS_EQ','+='); } else addToken('PLUS','+'); continue; }
+    if (c === '-') { if (peek() === '>') { advance(); addToken('ARROW','->'); } else if (peek() === '=') { advance(); addToken('MINUS_EQ','-='); } else addToken('MINUS','-'); continue; }
+    if (c === '*') { if (peek() === '=') { advance(); addToken('STAR_EQ','*='); } else addToken('STAR','*'); continue; }
+    if (c === '/') { if (peek() === '=') { advance(); addToken('SLASH_EQ','/='); } else addToken('SLASH','/'); continue; }
+    if (c === '%') { addToken('PERCENT','%'); continue; }
+    if (c === '=') { if (peek() === '=') { advance(); addToken('EQEQ','=='); } else if (peek() === '>') { advance(); addToken('FAT_ARROW','=>'); } else addToken('EQ','='); continue; }
+    if (c === '!') { if (peek() === '=') { advance(); addToken('NEQ','!='); } else addToken('NOT','!'); continue; }
+    if (c === '<') { if (peek() === '=') { advance(); addToken('LTEQ','<='); } else addToken('LT','<'); continue; }
+    if (c === '>') { if (peek() === '=') { advance(); addToken('GTEQ','>='); } else addToken('GT','>'); continue; }
+    if (c === '&' && peek() === '&') { advance(); addToken('AND','&&'); continue; }
+    if (c === '|' && peek() === '|') { advance(); addToken('OR','||'); continue; }
+    if (c === '?') {
+      if (peek() === '?') { advance(); addToken('DOUBLE_QUESTION','??'); }
+      else if (peek() === '.') { advance(); addToken('QUESTION_DOT','?.'); }
+      else addToken('QUESTION','?');
+      continue;
+    }
+
+    // Handle: @identifier
+    if (c === '@') {
+      if (peek() && /[a-z_]/.test(peek())) {
+        let h = '';
+        while (i < source.length && /[a-zA-Z0-9_]/.test(source[i])) h += advance();
+        addToken('HANDLE', '@' + h, 'tk-handle');
+      } else {
+        addToken('AT', '@');
+      }
+      continue;
+    }
+
+    // String
+    if (c === '"') {
+      let s = '', hasInterp = false;
+      while (i < source.length && source[i] !== '"') {
+        if (source[i] === '\\') {
+          advance();
+          const esc = advance();
+          if (esc === 'n') s += '\\n';
+          else if (esc === 't') s += '\\t';
+          else if (esc === '(') { s += '\\('; hasInterp = true; }
+          else s += esc;
+        } else {
+          s += advance();
+        }
+      }
+      if (i < source.length) advance(); // closing "
+      addToken(hasInterp ? 'INTERP_STRING' : 'STRING', '"' + s + '"', 'tk-string');
+      continue;
+    }
+
+    // Numbers
+    if (/[0-9]/.test(c)) {
+      let num = c;
+      if (c === '0' && peek() === 'x') {
+        num += advance();
+        while (i < source.length && /[0-9a-fA-F]/.test(source[i])) num += advance();
+        addToken('INT', num, 'tk-number');
+        continue;
+      }
+      if (c === '0' && peek() === 'b') {
+        num += advance();
+        while (i < source.length && /[01]/.test(source[i])) num += advance();
+        addToken('INT', num, 'tk-number');
+        continue;
+      }
+      let isFloat = false;
+      while (i < source.length && /[0-9]/.test(source[i])) num += advance();
+      if (peek() === '.' && peek2() && /[0-9]/.test(peek2())) {
+        isFloat = true;
+        num += advance(); // .
+        while (i < source.length && /[0-9]/.test(source[i])) num += advance();
+      }
+      addToken(isFloat ? 'FLOAT' : 'INT', num, 'tk-number');
+      continue;
+    }
+
+    // Identifiers, keywords, facets
+    if (/[a-zA-Z_]/.test(c)) {
+      let id = c;
+      while (i < source.length && /[a-zA-Z0-9_]/.test(source[i])) id += advance();
+
+      // Check for facet: ident@ident
+      if (peek() === '@' && i+1 < source.length && /[a-z]/.test(source[i+1])) {
+        const prefix = id;
+        advance(); // @
+        let handle = '';
+        while (i < source.length && /[a-zA-Z0-9_]/.test(source[i])) handle += advance();
+        // Check for path: prefix@handle/path
+        if (peek() === '/') {
+          advance();
+          let path = '';
+          while (i < source.length && /[a-zA-Z0-9_]/.test(source[i])) path += advance();
+          addToken('FACET_PATH', prefix + '@' + handle + '/' + path, 'tk-facet');
+        } else {
+          addToken('FACET', prefix + '@' + handle, 'tk-facet');
+        }
+        continue;
+      }
+
+      if (KEYWORDS.has(id)) addToken(id, id, 'tk-keyword');
+      else if (TYPES.has(id)) addToken('TYPE', id, 'tk-type');
+      else addToken('IDENTIFIER', id, 'tk-ident');
+      continue;
+    }
+
+    // Unknown
+    addToken('ERROR', c, 'tk-delim');
+  }
+
+  delete tokens._line;
+  delete tokens._col;
+  tokens.push({ kind: 'EOF', lexeme: '', line, col, cls: 'tk-delim' });
+  return tokens;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Simple AST Builder
+// ═══════════════════════════════════════════════════════════════════════════
+
+function buildAST(tokens) {
+  const nodes = [];
+  let i = 0;
+
+  function at() { return tokens[i]; }
+  function eat(kind) { if (at().kind === kind) return tokens[i++]; return null; }
+  function peek() { return tokens[i]?.kind; }
+
+  function parseTopLevel() {
+    while (i < tokens.length && peek() !== 'EOF') {
+      const t = at();
+      if (t.kind === 'identity') nodes.push(parseIdentityDecl());
+      else if (t.kind === 'let') nodes.push(parseLetDecl());
+      else if (t.kind === 'var') nodes.push(parseVarDecl());
+      else if (t.kind === 'const') nodes.push(parseConstDecl());
+      else if (t.kind === 'fn') nodes.push(parseFnDecl());
+      else if (t.kind === 'type') nodes.push(parseTypeDecl());
+      else if (t.kind === 'enum') nodes.push(parseEnumDecl());
+      else if (t.kind === 'every') nodes.push(parseEveryBlock());
+      else if (t.kind === 'when') nodes.push(parseWhenBlock());
+      else if (t.kind === 'after') nodes.push(parseAfterBlock());
+      else if (t.kind === 'send') nodes.push(parseSendStmt());
+      else if (t.kind === 'if') nodes.push(parseIfStmt());
+      else if (t.kind === 'for') nodes.push(parseForStmt());
+      else if (t.kind === 'match') nodes.push(parseMatchStmt());
+      else if (t.kind === 'return') nodes.push(parseReturnStmt());
+      else if (t.kind === 'import') nodes.push(parseImportStmt());
+      else if (t.kind === 'config') nodes.push(parseConfigBlock());
+      else if (t.kind === 'search') nodes.push({ type: 'SearchExpr', line: t.line, children: [skipExpr()] });
+      else { nodes.push({ type: 'ExprStmt', line: t.line, children: [skipExpr()] }); }
+    }
+  }
+
+  function skipExpr() {
+    const parts = [];
+    let depth = 0;
+    while (i < tokens.length && peek() !== 'EOF') {
+      const k = peek();
+      if (k === 'LBRACE' || k === 'LPAREN' || k === 'LBRACKET') depth++;
+      if (k === 'RBRACE' || k === 'RPAREN' || k === 'RBRACKET') {
+        if (depth === 0) break;
+        depth--;
+      }
+      if (depth === 0 && (k === 'let' || k === 'var' || k === 'const' || k === 'fn' ||
+          k === 'type' || k === 'enum' || k === 'every' || k === 'when' || k === 'after' ||
+          k === 'if' || k === 'for' || k === 'match' || k === 'return' || k === 'import' ||
+          k === 'identity' || k === 'config' || k === 'send' || k === 'RBRACE')) break;
+      parts.push(tokens[i++]);
+    }
+    return { type: 'Expr', tokens: parts.map(t => t.lexeme).join(' ') };
+  }
+
+  function skipBlock() {
+    const children = [];
+    if (eat('LBRACE')) {
+      let depth = 1;
+      while (i < tokens.length && depth > 0) {
+        if (peek() === 'LBRACE') depth++;
+        if (peek() === 'RBRACE') { depth--; if (depth === 0) { i++; break; } }
+        children.push(tokens[i++]);
+      }
+    }
+    return { type: 'Block', tokens: children.map(t => t.lexeme).join(' ') };
+  }
+
+  function parseIdentityDecl() {
+    const t = tokens[i++]; // identity
+    const name = tokens[i++]?.lexeme || '?';
+    eat('EQ');
+    const init = skipExpr();
+    return { type: 'IdentityDecl', name, init: init.tokens, line: t.line };
+  }
+
+  function parseLetDecl() {
+    const t = tokens[i++]; // let
+    const name = tokens[i++]?.lexeme || '?';
+    let typeAnn = null;
+    if (eat('COLON')) { typeAnn = tokens[i++]?.lexeme; if (eat('QUESTION')) typeAnn += '?'; }
+    eat('EQ');
+    const init = skipExpr();
+    return { type: 'LetDecl', name, typeAnn, init: init.tokens, line: t.line };
+  }
+
+  function parseVarDecl() {
+    const t = tokens[i++];
+    const name = tokens[i++]?.lexeme || '?';
+    let typeAnn = null;
+    if (eat('COLON')) { typeAnn = tokens[i++]?.lexeme; if (eat('QUESTION')) typeAnn += '?'; }
+    let init = null;
+    if (eat('EQ')) init = skipExpr().tokens;
+    return { type: 'VarDecl', name, typeAnn, init, line: t.line };
+  }
+
+  function parseConstDecl() {
+    const t = tokens[i++];
+    const name = tokens[i++]?.lexeme || '?';
+    eat('EQ');
+    return { type: 'ConstDecl', name, init: skipExpr().tokens, line: t.line };
+  }
+
+  function parseFnDecl() {
+    const t = tokens[i++]; // fn
+    const name = tokens[i++]?.lexeme || '?';
+    const params = skipExpr(); // params in parens
+    eat('RPAREN');
+    let retType = null;
+    if (eat('ARROW')) retType = tokens[i++]?.lexeme;
+    const body = skipBlock();
+    return { type: 'FnDecl', name, params: params.tokens, retType, body, line: t.line };
+  }
+
+  function parseTypeDecl() {
+    const t = tokens[i++];
+    const name = tokens[i++]?.lexeme || '?';
+    const body = skipBlock();
+    return { type: 'TypeDecl', name, body, line: t.line };
+  }
+
+  function parseEnumDecl() {
+    const t = tokens[i++];
+    const name = tokens[i++]?.lexeme || '?';
+    const body = skipBlock();
+    return { type: 'EnumDecl', name, body, line: t.line };
+  }
+
+  function parseEveryBlock() {
+    const t = tokens[i++];
+    const interval = [];
+    while (i < tokens.length && peek() !== 'LBRACE' && peek() !== 'when' && peek() !== 'EOF')
+      interval.push(tokens[i++]);
+    let cond = null;
+    if (eat('when')) {
+      const c = [];
+      while (i < tokens.length && peek() !== 'LBRACE' && peek() !== 'EOF') c.push(tokens[i++]);
+      cond = c.map(t => t.lexeme).join(' ');
+    }
+    const body = skipBlock();
+    return { type: 'EveryBlock', interval: interval.map(t=>t.lexeme).join(' '), condition: cond, body, line: t.line };
+  }
+
+  function parseWhenBlock() {
+    const t = tokens[i++];
+    const c = [];
+    while (i < tokens.length && peek() !== 'LBRACE' && peek() !== 'EOF') c.push(tokens[i++]);
+    return { type: 'WhenBlock', condition: c.map(t=>t.lexeme).join(' '), body: skipBlock(), line: t.line };
+  }
+
+  function parseAfterBlock() {
+    const t = tokens[i++];
+    const delay = [];
+    while (i < tokens.length && peek() !== 'LBRACE' && peek() !== 'EOF') delay.push(tokens[i++]);
+    return { type: 'AfterBlock', delay: delay.map(t=>t.lexeme).join(' '), body: skipBlock(), line: t.line };
+  }
+
+  function parseSendStmt() {
+    const t = tokens[i++]; eat('to');
+    const recip = tokens[i++]?.lexeme || '?';
+    return { type: 'SendStmt', to: recip, body: skipBlock(), line: t.line };
+  }
+
+  function parseIfStmt() {
+    const t = tokens[i++];
+    const c = [];
+    while (i < tokens.length && peek() !== 'LBRACE' && peek() !== 'EOF') c.push(tokens[i++]);
+    const body = skipBlock();
+    let elseBranch = null;
+    if (eat('else')) {
+      if (peek() === 'if') elseBranch = parseIfStmt();
+      else elseBranch = { type: 'ElseBlock', body: skipBlock() };
+    }
+    return { type: 'IfStmt', condition: c.map(t=>t.lexeme).join(' '), body, elseBranch, line: t.line };
+  }
+
+  function parseForStmt() {
+    const t = tokens[i++];
+    const v = tokens[i++]?.lexeme || '?';
+    eat('in');
+    const iter = skipExpr();
+    return { type: 'ForStmt', variable: v, iterable: iter.tokens, body: skipBlock(), line: t.line };
+  }
+
+  function parseMatchStmt() {
+    const t = tokens[i++];
+    const subj = tokens[i++]?.lexeme || '?';
+    return { type: 'MatchStmt', subject: subj, body: skipBlock(), line: t.line };
+  }
+
+  function parseReturnStmt() {
+    const t = tokens[i++];
+    return { type: 'ReturnStmt', value: skipExpr().tokens, line: t.line };
+  }
+
+  function parseImportStmt() {
+    const t = tokens[i++];
+    const parts = [];
+    while (i < tokens.length && (peek() === 'IDENTIFIER' || peek() === 'DOT' || peek() === 'TYPE'))
+      parts.push(tokens[i++]);
+    return { type: 'ImportStmt', path: parts.map(t=>t.lexeme).join(''), line: t.line };
+  }
+
+  function parseConfigBlock() {
+    const t = tokens[i++];
+    return { type: 'ConfigBlock', body: skipBlock(), line: t.line };
+  }
+
+  parseTopLevel();
+  return nodes;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderTokens(tokens) {
+  const el = document.getElementById('view-tokens');
+  let html = '';
+  for (const t of tokens) {
+    if (t.kind === 'EOF') continue;
+    html += `<div class="token-row">` +
+      `<span class="token-pos">${t.line}:${t.col}</span>` +
+      `<span class="token-kind ${t.cls}">${esc(t.kind)}</span>` +
+      `<span class="token-lexeme">${esc(t.lexeme)}</span>` +
+      `</div>`;
+  }
+  el.innerHTML = html || '<span style="color:var(--text-faint)">No tokens</span>';
+}
+
+function renderAST(nodes) {
+  const el = document.getElementById('view-ast');
+  let html = '<span class="ast-label">Program</span>\n';
+  for (let i = 0; i < nodes.length; i++) {
+    const last = i === nodes.length - 1;
+    html += renderASTNode(nodes[i], last ? '└── ' : '├── ', last ? '    ' : '│   ');
+  }
+  el.innerHTML = '<pre style="margin:0;font-family:inherit;background:none;color:inherit;padding:0;border:none;">' + html + '</pre>';
+}
+
+function renderASTNode(node, prefix, childPrefix) {
+  let html = `${prefix}<span class="ast-label">${node.type}</span>`;
+  const attrs = [];
+  if (node.name) attrs.push(`name: <span class="ast-value">"${esc(node.name)}"</span>`);
+  if (node.path) attrs.push(`path: <span class="ast-value">"${esc(node.path)}"</span>`);
+  if (node.to) attrs.push(`to: <span class="ast-handle">${esc(node.to)}</span>`);
+  if (node.variable) attrs.push(`var: <span class="ast-value">"${esc(node.variable)}"</span>`);
+  if (node.typeAnn) attrs.push(`type: <span class="ast-type">${esc(node.typeAnn)}</span>`);
+  if (node.retType) attrs.push(`returns: <span class="ast-type">${esc(node.retType)}</span>`);
+  if (node.condition) attrs.push(`when: <span class="ast-op">${esc(node.condition)}</span>`);
+  if (node.interval) attrs.push(`interval: <span class="ast-op">${esc(node.interval)}</span>`);
+  if (node.delay) attrs.push(`delay: <span class="ast-op">${esc(node.delay)}</span>`);
+  if (node.subject) attrs.push(`subject: <span class="ast-value">"${esc(node.subject)}"</span>`);
+  if (node.init) attrs.push(`init: <span class="ast-op">${esc(node.init)}</span>`);
+  if (node.value) attrs.push(`value: <span class="ast-op">${esc(node.value)}</span>`);
+  if (node.params) attrs.push(`params: <span class="ast-op">${esc(node.params)}</span>`);
+  if (node.iterable) attrs.push(`iterable: <span class="ast-op">${esc(node.iterable)}</span>`);
+
+  if (attrs.length > 0) html += `  ${attrs.join(', ')}`;
+  html += `  <span style="color:var(--text-faint)">:${node.line || '?'}</span>\n`;
+
+  if (node.body && node.body.type === 'Block' && node.body.tokens) {
+    html += `${childPrefix}└── <span style="color:var(--text-dim)">Block { ${esc(node.body.tokens.substring(0, 60))}${node.body.tokens.length > 60 ? '...' : ''} }</span>\n`;
+  }
+  if (node.elseBranch) {
+    html += renderASTNode(node.elseBranch, childPrefix + '└── ', childPrefix + '    ');
+  }
+  return html;
+}
+
+function renderRust(tokens, nodes) {
+  const el = document.getElementById('view-rust');
+  let rust = '';
+  rust += `<span class="r-cm">// Auto-generated Rust from ULissy source</span>\n`;
+  rust += `<span class="r-cm">// ulissy transpile → rustc → native binary</span>\n\n`;
+  rust += `<span class="r-kw">use</span> <span class="r-ty">gns_runtime</span>::{<span class="r-ty">Identity</span>, <span class="r-ty">Breadcrumb</span>, <span class="r-ty">H3Cell</span>, <span class="r-ty">Sensors</span>};\n`;
+  rust += `<span class="r-kw">use</span> <span class="r-ty">gns_runtime</span>::keychain::<span class="r-ty">Keychain</span>;\n\n`;
+
+  for (const node of nodes) {
+    if (node.type === 'IdentityDecl') {
+      rust += `<span class="r-kw">let</span> ${node.name} = <span class="r-ty">Identity</span>::<span class="r-fn">from_keychain</span>(<span class="r-ty">Keychain</span>::<span class="r-fn">${node.init.includes('facet') ? 'facet' : 'primary'}</span>()?)?;\n`;
+    } else if (node.type === 'LetDecl') {
+      rust += `<span class="r-kw">let</span> ${node.name}${node.typeAnn ? ': <span class="r-ty">' + node.typeAnn + '</span>' : ''} = ${esc(node.init)};\n`;
+    } else if (node.type === 'VarDecl') {
+      rust += `<span class="r-kw">let mut</span> ${node.name}${node.init ? ' = ' + esc(node.init) : ''};\n`;
+    } else if (node.type === 'FnDecl') {
+      rust += `\n<span class="r-kw">fn</span> <span class="r-fn">${node.name}</span>(${esc(node.params)})${node.retType ? ' -> <span class="r-ty">' + node.retType + '</span>' : ''} {\n    <span class="r-cm">// ... transpiled body</span>\n}\n`;
+    } else if (node.type === 'TypeDecl') {
+      rust += `\n<span class="r-kw">pub struct</span> <span class="r-ty">${node.name}</span> {\n    <span class="r-cm">// ... fields</span>\n}\n`;
+    } else if (node.type === 'EnumDecl') {
+      rust += `\n<span class="r-kw">pub enum</span> <span class="r-ty">${node.name}</span> {\n    <span class="r-cm">// ... variants</span>\n}\n`;
+    } else if (node.type === 'EveryBlock') {
+      rust += `\n<span class="r-cm">// every ${esc(node.interval)}${node.condition ? ' when ' + esc(node.condition) : ''}</span>\n`;
+      rust += `<span class="r-ty">Scheduler</span>::<span class="r-fn">every</span>(${esc(node.interval)}, <span class="r-kw">move</span> || {\n    <span class="r-cm">// ... body</span>\n});\n`;
+    } else if (node.type === 'WhenBlock') {
+      rust += `\n<span class="r-cm">// when ${esc(node.condition)}</span>\n`;
+      rust += `<span class="r-kw">if</span> ${esc(node.condition)} {\n    <span class="r-cm">// ... body</span>\n}\n`;
+    } else if (node.type === 'ConfigBlock') {
+      rust += `\n<span class="r-kw">lazy_static!</span> {\n    <span class="r-kw">static ref</span> CONFIG: <span class="r-ty">Config</span> = <span class="r-ty">Config</span> {\n        <span class="r-cm">// ... config fields</span>\n    };\n}\n`;
+    } else if (node.type === 'ImportStmt') {
+      rust += `<span class="r-kw">use</span> ${esc(node.path.replace(/\./g, '::'))};\n`;
+    } else if (node.type === 'ExprStmt' || node.type === 'SearchExpr') {
+      rust += `<span class="r-cm">// ${node.type}</span>\n`;
+    }
+  }
+
+  el.innerHTML = '<pre style="margin:0;font-family:inherit;background:none;color:inherit;padding:0;border:none;">' + rust + '</pre>';
+}
+
+function renderInfo(source, tokens, nodes) {
+  const el = document.getElementById('view-info');
+  const lines = source.split('\n').length;
+  const realTokens = tokens.filter(t => t.kind !== 'EOF');
+  const keywords = realTokens.filter(t => t.cls === 'tk-keyword').length;
+  const handles = realTokens.filter(t => t.cls === 'tk-handle' || t.cls === 'tk-facet').length;
+  const types = realTokens.filter(t => t.cls === 'tk-type').length;
+  const errors = realTokens.filter(t => t.kind === 'ERROR').length;
+
+  el.innerHTML = `
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>Tokens</h3>
+        <div class="val">${realTokens.length}</div>
+        <div class="sub">${keywords} keywords · ${handles} handles/facets · ${types} types</div>
+      </div>
+      <div class="info-card">
+        <h3>AST Nodes</h3>
+        <div class="val">${nodes.length}</div>
+        <div class="sub">${nodes.map(n=>n.type).filter((v,i,a)=>a.indexOf(v)===i).join(', ')}</div>
+      </div>
+      <div class="info-card">
+        <h3>Source</h3>
+        <div class="val">${lines}</div>
+        <div class="sub">${source.length} characters · ${lines} lines</div>
+      </div>
+      <div class="info-card">
+        <h3>Status</h3>
+        <div class="val" style="color:${errors > 0 ? 'var(--accent-rose)' : 'var(--accent-green)'}">${errors > 0 ? errors + ' errors' : 'OK'}</div>
+        <div class="sub">${errors > 0 ? 'Lexer errors detected' : 'Clean parse'}</div>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding:16px;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;">
+      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:8px;">Compiler Pipeline</h3>
+      <div style="font-size:12px;line-height:1.8;color:var(--text-dim);">
+        <span style="color:var(--accent-green)">✓</span> Lexer — ${realTokens.length} tokens (64 token types)<br>
+        <span style="color:var(--accent-green)">✓</span> Parser — ${nodes.length} AST nodes (18 statement types)<br>
+        <span style="color:var(--accent-amber)">○</span> Type Checker — domain-specific type resolution<br>
+        <span style="color:var(--accent-amber)">○</span> Code Generator — Rust emission + Cargo.toml<br>
+        <span style="color:var(--text-faint)">·</span> <span style="color:var(--text-faint)">Full pipeline requires WASM build of Rust compiler</span>
+      </div>
+    </div>
+  `;
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI LOGIC
+// ═══════════════════════════════════════════════════════════════════════════
+
+const editor = document.getElementById('editor');
+const lineNums = document.getElementById('lineNums');
+
+function updateLineNumbers() {
+  const lines = editor.value.split('\n').length;
+  let html = '';
+  for (let i = 1; i <= lines; i++) html += i + '\n';
+  lineNums.textContent = html;
+}
+
+editor.addEventListener('input', () => {
+  updateLineNumbers();
+  clearTimeout(editor._timer);
+  editor._timer = setTimeout(analyze, 300);
+});
+
+editor.addEventListener('scroll', () => {
+  lineNums.scrollTop = editor.scrollTop;
+});
+
+editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = editor.selectionStart;
+    editor.value = editor.value.substring(0, start) + '    ' + editor.value.substring(editor.selectionEnd);
+    editor.selectionStart = editor.selectionEnd = start + 4;
+    updateLineNumbers();
+  }
+});
+
+function analyze() {
+  const source = editor.value;
+  const t0 = performance.now();
+  const tokens = tokenize(source);
+  const nodes = buildAST(tokenize(source)); // fresh tokens for AST
+  const elapsed = (performance.now() - t0).toFixed(1);
+
+  renderTokens(tokens);
+  renderAST(nodes);
+  renderRust(tokens, nodes);
+  renderInfo(source, tokens, nodes);
+
+  document.getElementById('status').textContent = `${tokens.length - 1} tokens · ${nodes.length} nodes · ${elapsed}ms`;
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.output-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.output-view').forEach(v => v.classList.remove('active'));
+  document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
+  document.getElementById('view-' + name).classList.add('active');
+}
+
+function clearEditor() {
+  editor.value = '';
+  updateLineNumbers();
+  analyze();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXAMPLES
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EXAMPLES = {
+breadcrumb: `// Breadcrumb Collection — Proof of Trajectory
+// Replaces ~250 lines of Rust with ~15 lines of ULissy
+
+identity me = Keychain.primary
+
+config {
+    resolution: 7,
+    interval: 10.minutes,
+    minBreadcrumbsPerEpoch: 100
+}
+
+every config.interval when battery > 20 && gps.available {
+    let crumb = breadcrumb(
+        cell: here.h3(config.resolution),
+        context: sensors.digest,
+        previous: me.trajectory.last?.hash ?? "genesis"
+    ).signed(me)
+
+    me.trajectory.append(crumb)
+}
+
+when me.trajectory.pending >= config.minBreadcrumbsPerEpoch {
+    let epoch = me.trajectory.bundleEpoch()
+    network.publish(epoch)
+}`,
+
+search: `// TrIP Search — Spatial-Identity Discovery
+import ulissy.prelude
+
+fn discoverNearby() {
+    // Find trusted peers nearby
+    let locals = search nearby
+                 where trust > 0.5,
+                       active within 1.hours
+                 ranked by recency desc
+
+    print("Found \\(locals.count) active peers")
+
+    // Search for a specific identity
+    let alice = search @alice
+
+    if let peer = alice {
+        print("Found: \\(peer.handle) at \\(peer.distance)m")
+        print("Trust: \\(peer.trust)")
+    } else {
+        print("Not found nearby")
+    }
+
+    // Text search with trust filter
+    let doctors = search "cardiologist"
+                  where trust >= 0.8,
+                        facet == "medical"
+                  ranked by relevance desc
+}
+
+discoverNearby()`,
+
+messaging: `// Encrypted Messaging — Zero-Knowledge Communication
+identity me = Keychain.primary
+identity work = Keychain.facet("company")
+
+// Send encrypted message (X25519 + ChaCha20 automatic)
+send to @alice {
+    message: "Meeting at 3pm",
+    attachment: document
+}
+
+// Facet-scoped communication
+dix@me.post("Hello from the GNS network!", visibility: .public)
+
+// IoT control via facets
+home@me/lights.set(brightness: 80.percent)
+
+// Payment via handle
+pay@merchant.request(50.USD)`,
+
+trust: `// Trust Scoring — Parisi k=7 Criticality Engine
+import ulissy.prelude
+
+config {
+    parisiK: 7,
+    tau0Human: 2592000,
+    minBreadcrumbs: 100
+}
+
+enum TrustLevel { anonymous, verified, established, trusted, vouched }
+
+fn trustLevelFromEpochs(epochs: Int) -> TrustLevel {
+    if epochs == 0 { return .anonymous }
+    if epochs < 5 { return .verified }
+    if epochs < 20 { return .established }
+    if epochs < 50 { return .trusted }
+    return .vouched
+}
+
+fn computeTrustScore(epochs: Int, peers: Int, decay: Float) -> Float {
+    let base = epochs * 10.0
+    let peerMultiplier = 1.0 + (peers / config.parisiK)
+    let decayFactor = decay
+    return base * peerMultiplier * decayFactor
+}
+
+// Trust progression demo
+for epochs in [0, 1, 5, 10, 50, 100] {
+    let level = trustLevelFromEpochs(epochs)
+    print("\\(epochs) epochs → \\(level)")
+}`,
+
+iot: `// IoT Control — Smart Home via GNS Facets
+identity me = Keychain.primary
+
+// Every device is addressed through facets
+home@me/lights.set(brightness: 80.percent)
+home@me/thermostat.set(temperature: 22)
+home@me/tv.power(on: true)
+
+// Geofencing triggers
+when here exits homeZone {
+    home@me/security.arm()
+    home@me/lights.all(off: true)
+    print("Home secured — left zone")
+}
+
+when here within homeZone {
+    home@me/security.disarm()
+    home@me/lights.set(scene: "welcome")
+    print("Welcome home!")
+}
+
+// Energy-aware scheduling
+every 30.minutes when battery > 15 {
+    let status = home@me.status()
+    print("Home status: \\(status.devices) devices online")
+}`,
+
+types: `// ULissy Type System — Safety Through Types
+import ulissy.prelude
+
+// Coordinates are RESTRICTED — cannot be transmitted
+// let raw = gps.current    // Type: Coordinates
+// send(raw, to: server)   // COMPILE ERROR!
+
+// Must quantize to H3Cell first
+let cell = here.h3(10)     // Type: H3Cell (safe)
+
+// Custom types with invariants
+type Breadcrumb {
+    index: Uint64
+    timestamp: Moment
+    cell: H3Cell
+    context: Hash
+    previousHash: Hash
+    signature: Signature
+
+    invariant timestamp <= now
+    invariant signature.verify(self, owner)
+}
+
+// Enums with associated types
+enum SearchResult<T> {
+    found(T),
+    notFound,
+    error(String)
+}
+
+// Unit-aware types prevent mixing
+let d = 500.meters
+let t = 10.minutes
+// let x = d + t   // COMPILE ERROR: Distance + Duration
+
+// Optional chaining
+let hash = me.trajectory.last?.hash ?? "genesis"
+print("Latest hash: \\(hash)")`
+};
+
+function loadExample(name) {
+  if (!name || !EXAMPLES[name]) return;
+  editor.value = EXAMPLES[name];
+  updateLineNumbers();
+  analyze();
+  document.getElementById('examples').value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+
+loadExample('breadcrumb');
+</script>
+</body>
+</html>
