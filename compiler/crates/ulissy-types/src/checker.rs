@@ -1571,15 +1571,22 @@ impl TypeChecker {
             Type::Breadcrumb => match member {
                 "hash" => Some(Type::Hash),
                 "timestamp" => Some(Type::Moment),
-                "h3Index" => Some(Type::H3Cell),
+                "h3Index" | "cell" => Some(Type::H3Cell),
                 "signature" => Some(Type::Signature),
                 "published" => Some(Type::Bool),
+                "index" => Some(Type::Int),
+                "previousHash" | "previous" => Some(Type::Hash),
+                "owner" => Some(Type::Hash),
+                "context" => Some(Type::Hash),
                 _ => None,
             },
             Type::Identity => match member {
                 "publicKey" => Some(Type::PublicKey),
                 "trajectory" => Some(Type::Trajectory),
                 "hasHandle" => Some(Type::Bool),
+                "stellarAddress" => Some(Type::String),
+                "handle" => Some(Type::Optional(Box::new(Type::Handle))),
+                "trustScore" => Some(Type::Float),
                 _ => None,
             },
             Type::SearchResultSet => match member {
@@ -1612,8 +1619,8 @@ impl TypeChecker {
     fn list_members(&self, ty: &Type) -> String {
         match ty {
             Type::Trajectory => "count, last, first, pending, uniqueCells".to_string(),
-            Type::Breadcrumb => "hash, timestamp, h3Index, signature, published".to_string(),
-            Type::Identity => "publicKey, trajectory, hasHandle".to_string(),
+            Type::Breadcrumb => "hash, timestamp, h3Index, cell, signature, published, index, previousHash, owner, context".to_string(),
+            Type::Identity => "publicKey, trajectory, hasHandle, stellarAddress, handle, trustScore".to_string(),
             Type::SearchResultSet => "count".to_string(),
             Type::SearchResult => "handle, distance, trust, age, tit".to_string(),
             _ => "(unknown)".to_string(),
