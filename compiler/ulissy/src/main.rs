@@ -426,9 +426,9 @@ fn cmd_fmt(file: &str) -> Result<(), String> {
 fn cmd_info() -> Result<(), String> {
     print_logo();
     println!();
-    println!("  {}: {}", "Version".bold(), "0.1.0");
-    println!("  {}: {}", "Target".bold(), "Rust → gns-crypto-core");
-    println!("  {}: {}", "Platform".bold(), "iOS, Android, Desktop, WASM");
+    println!("  {}: 0.1.0", "Version".bold());
+    println!("  {}: Rust → gns-crypto-core", "Target".bold());
+    println!("  {}: iOS, Android, Desktop, WASM", "Platform".bold());
     println!();
     println!("  {}", "Components:".bold());
     println!("    {} ulissy-lexer    Tokenization", "•".blue());

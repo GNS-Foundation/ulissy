@@ -345,14 +345,12 @@ hex = "0.4"
                 self.emitter
                     .emit_line(&format!("let mut {} = {};", name, init_code));
             }
+        } else if type_annotation != "auto" {
+            self.emitter
+                .emit_line(&format!("let mut {}: {};", name, type_annotation));
         } else {
-            if type_annotation != "auto" {
-                self.emitter
-                    .emit_line(&format!("let mut {}: {};", name, type_annotation));
-            } else {
-                self.emitter
-                    .emit_line(&format!("let mut {} = Default::default();", name));
-            }
+            self.emitter
+                .emit_line(&format!("let mut {} = Default::default();", name));
         }
         Ok(())
     }
@@ -1105,9 +1103,8 @@ hex = "0.4"
             TypedExprKind::Literal(lit) => self.generate_literal(lit),
 
             TypedExprKind::Identifier(name) => {
-                if name.starts_with('.') {
+                if let Some(variant) = name.strip_prefix('.') {
                     // Enum shorthand: .public -> EnumType::Public
-                    let variant = &name[1..];
                     let capitalized = to_pascal_case(variant);
 
                     // FIX H: Use enum_variant_map for type lookup
@@ -1164,10 +1161,10 @@ hex = "0.4"
                     }
                 }
 
-                if needs_parens(&op, left) {
+                if needs_parens(op, left) {
                     l = format!("({})", l);
                 }
-                if needs_parens(&op, right) {
+                if needs_parens(op, right) {
                     r = format!("({})", r);
                 }
 
@@ -1218,12 +1215,10 @@ hex = "0.4"
                     _ => {
                         if obj == "Keychain" || obj == "Bytes" || obj == "Sensors" {
                             Ok(format!("{}::{}", obj, mapped))
+                        } else if mapped == "stellar_address" {
+                            Ok(format!("{}.stellar_address()", obj))
                         } else {
-                            if mapped == "stellar_address" {
-                                Ok(format!("{}.stellar_address()", obj))
-                            } else {
-                                Ok(format!("{}.{}", obj, mapped))
-                            }
+                            Ok(format!("{}.{}", obj, mapped))
                         }
                     }
                 }
@@ -1309,17 +1304,14 @@ hex = "0.4"
                             for (i, (arg_code, arg_expr)) in
                                 cast_args.iter_mut().zip(args.iter()).enumerate()
                             {
-                                if i < param_types.len() {
-                                    if param_types[i] == Type::Float
-                                        && (arg_expr.ty == Type::Int
-                                            || !matches!(arg_expr.ty, Type::Float))
-                                    {
-                                        if !arg_code.contains("as f64")
-                                            && !arg_code.contains(".000")
-                                        {
-                                            *arg_code = format!("{} as f64", arg_code);
-                                        }
-                                    }
+                                if i < param_types.len()
+                                    && param_types[i] == Type::Float
+                                    && (arg_expr.ty == Type::Int
+                                        || !matches!(arg_expr.ty, Type::Float))
+                                    && !arg_code.contains("as f64")
+                                    && !arg_code.contains(".000")
+                                {
+                                    *arg_code = format!("{} as f64", arg_code);
                                 }
                             }
                         }
@@ -1644,7 +1636,6 @@ hex = "0.4"
                         ast::ComparisonOp::Equal => "Eq",
                         ast::ComparisonOp::NotEqual => "Ne",
                         ast::ComparisonOp::Contains => "Contains",
-                        _ => "Eq",
                     };
                     code.push_str(&format!(
                         "\n        .filter(\"{}\", gns_search::Op::{}, {})",
@@ -1898,19 +1889,6 @@ hex = "0.4"
         }
     }
 
-    fn map_unit(&self, unit: &str) -> String {
-        match unit {
-            "seconds" => "Duration::from_secs".to_string(),
-            "minutes" => "Duration::from_mins".to_string(),
-            "hours" => "Duration::from_hours".to_string(),
-            "days" => "Duration::from_days".to_string(),
-            "meters" => "Distance::meters".to_string(),
-            "kilometers" => "Distance::kilometers".to_string(),
-            "percent" => "Percent::from".to_string(),
-            _ => format!("{}::from", unit),
-        }
-    }
-
     fn binary_op_to_rust(&self, op: &BinaryOp) -> &'static str {
         match op {
             BinaryOp::Add => "+",
@@ -1971,7 +1949,7 @@ fn stmt_contains_call(stmt: &TypedStatement, fn_name: &str) -> bool {
                 || body_contains_call(then_block, fn_name)
                 || else_block
                     .as_ref()
-                    .map_or(false, |b| body_contains_call(b, fn_name))
+                    .is_some_and(|b| body_contains_call(b, fn_name))
         }
         TypedStatementKind::ForStatement { body, .. } => body_contains_call(body, fn_name),
         _ => false,
@@ -1998,14 +1976,6 @@ fn expr_contains_call(expr: &TypedExpr, fn_name: &str) -> bool {
         }
         TypedExprKind::Unary { operand, .. } => expr_contains_call(operand, fn_name),
         _ => false,
-    }
-}
-
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
     }
 }
 
