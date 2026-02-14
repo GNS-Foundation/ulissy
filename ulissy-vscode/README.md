@@ -2,7 +2,7 @@
 
 Official Visual Studio Code extension for the **ULissy** programming language - *A Programming Language for Moving Machines*.
 
-![ULissy Syntax Highlighting](https://raw.githubusercontent.com/gns-protocol/ulissy-vscode/main/images/screenshot.png)
+![ULissy Syntax Highlighting](https://raw.githubusercontent.com/GNS-Foundation/ulissy-vscode/main/images/screenshot.png)
 
 ## Features
 
@@ -68,7 +68,7 @@ Access via Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
 ## Requirements
 
-- [ULissy Compiler](https://github.com/gns-protocol/ULissy_Program) installed and in PATH
+- [ULissy Compiler](https://github.com/GNS-Foundation/ULissy_Program) installed and in PATH
 - VS Code 1.85.0 or higher
 
 ## Installation
@@ -82,13 +82,13 @@ Access via Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
 ### From VSIX
 
-1. Download the `.vsix` file from [releases](https://github.com/gns-protocol/ulissy-vscode/releases)
+1. Download the `.vsix` file from [releases](https://github.com/GNS-Foundation/ulissy-vscode/releases)
 2. In VS Code: Extensions → `...` → Install from VSIX
 
 ### From Source
 
 ```bash
-git clone https://github.com/gns-protocol/ulissy-vscode
+git clone https://github.com/GNS-Foundation/ulissy-vscode
 cd ulissy-vscode
 npm install
 npm run compile
@@ -182,6 +182,6 @@ MIT - GNS Foundation
 
 ## Links
 
-- [ULissy Language](https://github.com/gns-protocol/ULissy_Program)
+- [ULissy Language](https://github.com/GNS-Foundation/ULissy_Program)
 - [GNS Protocol](https://gns.foundation)
-- [Report Issues](https://github.com/gns-protocol/ulissy-vscode/issues)
+- [Report Issues](https://github.com/GNS-Foundation/ulissy-vscode/issues)

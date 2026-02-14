@@ -532,7 +532,7 @@ async function showWelcomeMessage(context: vscode.ExtensionContext) {
             vscode.commands.executeCommand('ulissy.newProject');
         } else if (selection === 'View Documentation') {
             vscode.env.openExternal(
-                vscode.Uri.parse('https://github.com/gns-protocol/ULissy_Program')
+                vscode.Uri.parse('https://github.com/GNS-Foundation/ULissy_Program')
             );
         }
         

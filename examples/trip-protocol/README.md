@@ -6,7 +6,7 @@
 
 ```bash
 # Clone ULissy compiler (if needed)
-git clone https://github.com/gns-protocol/ULissy_Program
+git clone https://github.com/GNS-Foundation/ULissy_Program
 cd ULissy_Program
 cargo build --release
 

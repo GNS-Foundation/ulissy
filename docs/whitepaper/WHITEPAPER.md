@@ -995,7 +995,7 @@ pay@merchant
 **Authors**: GNS Foundation
 **License**: MIT
 
-**Repository**: https://github.com/gns-protocol/ULissy_Program
+**Repository**: https://github.com/GNS-Foundation/ULissy_Program
 
 ---
 

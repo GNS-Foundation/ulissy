@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["GNS Foundation <foundation@gns.foundation>"]
 description = "Runtime support library for ULissy - provides scheduling, location, sensors, and platform abstractions"
 license = "MIT"
-repository = "https://github.com/gns-protocol/gns-runtime"
+repository = "https://github.com/GNS-Foundation/gns-runtime"
 keywords = ["runtime", "ulissy", "gns", "geospatial", "mobile"]
 categories = ["embedded", "asynchronous"]
 

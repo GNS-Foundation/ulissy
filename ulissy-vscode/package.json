@@ -11,12 +11,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gns-protocol/ulissy-vscode"
+    "url": "https://github.com/GNS-Foundation/ulissy-vscode"
   },
   "bugs": {
-    "url": "https://github.com/gns-protocol/ulissy-vscode/issues"
+    "url": "https://github.com/GNS-Foundation/ulissy-vscode/issues"
   },
-  "homepage": "https://github.com/gns-protocol/ULissy_Program",
+  "homepage": "https://github.com/GNS-Foundation/ULissy_Program",
   "engines": {
     "vscode": "^1.85.0"
   },
