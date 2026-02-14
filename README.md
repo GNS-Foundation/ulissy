@@ -4,7 +4,7 @@
 
 ULissy is a domain-specific programming language designed for machines that move through physical space — mobile phones, vehicles, drones, wearables, and IoT devices. It treats identity, location, time, cryptography, and energy as first-class language primitives rather than library imports.
 
-ULissy transpiles to Rust and integrates natively with the [GNS Protocol](https://github.com/gns-protocol) (Geospatial Naming System).
+ULissy transpiles to Rust and integrates natively with the [GNS Protocol](https://github.com/GNS-Foundation)
 
 *Named after Ulysses (Odysseus) — who proved his identity not through credentials, but through his journey.*
 
