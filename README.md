@@ -251,7 +251,7 @@ MIT
 
 ## Links
 
-- [GNS Protocol](https://github.com/gns-protocol)
+- [GNS Protocol](https://github.com/GNS-Foundation)
 - [Whitepaper](docs/whitepaper/WHITEPAPER.md)
 - [Provisional Patent #63/948,788](https://www.uspto.gov) — Proof-of-Trajectory
 
