@@ -136,7 +136,7 @@ impl Type {
             // Int can be promoted to Float
             (Type::Float, Type::Int) => true,
             // Optional can accept non-optional AND Nil
-            (Type::Optional(inner), Type::Nil) => true,
+            (Type::Optional(_inner), Type::Nil) => true,
             (Type::Optional(inner), other) => inner.is_assignable_from(other),
             // Array covariance
             (Type::Array(a), Type::Array(b)) => a.is_assignable_from(b),
@@ -189,11 +189,9 @@ impl Type {
             // Comparison: requires compatible types, returns Bool
             Eq | NotEq => Some(Type::Bool),
             Lt | Gt | LtEq | GtEq => {
-                let is_compat = (self.is_numeric() && other.is_numeric())
-                    || (*self == Type::Moment && *other == Type::Moment)
-                    || (*self == Type::Duration && *other == Type::Duration)
-                    || (*self == Type::Moment && *other == Type::Moment)
-                    || (*self == Type::Duration && *other == Type::Duration)
+                let is_compat = self.is_numeric() && other.is_numeric()
+                    || *self == Type::Moment && *other == Type::Moment
+                    || *self == Type::Duration && *other == Type::Duration
                     || (*self == Type::Distance && *other == Type::Distance)
                     || (*self == Type::TrustScore && *other == Type::Float)
                     || (*self == Type::Float && *other == Type::TrustScore)

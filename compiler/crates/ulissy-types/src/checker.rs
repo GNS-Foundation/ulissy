@@ -1032,9 +1032,7 @@ impl TypeChecker {
                         }
                     }
                     ast::UnaryOp::Not => {
-                        if operand.ty == Type::Any {
-                            Type::Bool
-                        } else if operand.ty == Type::Bool {
+                        if operand.ty == Type::Any || operand.ty == Type::Bool {
                             Type::Bool
                         } else {
                             return Err(TypeError::new(
