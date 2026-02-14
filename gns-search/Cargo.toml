@@ -1,0 +1,6 @@
+[package]
+name = "gns-search"
+version = "0.1.0"
+edition = "2021"
+description = "Spatial-identity search for the GNS Protocol"
+license = "MIT"
